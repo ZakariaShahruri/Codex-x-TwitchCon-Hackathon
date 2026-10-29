@@ -1,0 +1,7 @@
+- repo shared with testing@devpost.com
+- 3 min max demo video
+- project description:
+    - project explanation
+    - how to run it
+    - how it uses Codex
+- Codex Session ID
