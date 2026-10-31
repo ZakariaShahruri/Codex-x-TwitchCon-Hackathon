@@ -6,7 +6,7 @@ How we work (roles, Codex prompts, parallel work, git) is in `AGENTS.md` / `CLAU
 
 | File | What it's for | Update when |
 |---|---|---|
-| `concept.md` | The chosen idea (Twitchy — Stream Shield), how it works, scope, demo outline, rejected ideas | Scope changes |
+| `concept.md` | Goal (win), the idea (Twitchy — Stream Shield), track owners, scope tiers, milestones, demo outline, rejected ideas | Scope changes |
 | `architecture.md` | Timing guarantee, OBS layout, components, tracks and folders, event contract, stack, config, go/no-go checks | Tech decisions change |
 | `devpost.md` | Copy of the Devpost page: brief, submission requirements, prizes, judging criteria | Devpost posts an update |
 | `codex-sessions.md` | Each teammate's Codex session ID and track; marks the main thread whose ID goes in the submission | Someone starts a new Codex thread or switches track |

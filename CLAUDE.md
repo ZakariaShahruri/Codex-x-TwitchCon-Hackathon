@@ -7,7 +7,20 @@ This file is about **how we work**. What we build is in `docs/concept.md`; how i
 ## Project
 
 **Twitchy — Stream Shield**, our entry for the Codex x TwitchCon Hackathon.
-**Deadline: Nov 2, 2026, 2:00pm PST.** A working, polished demo beats feature completeness.
+**Deadline: Nov 2, 2026, 2:00pm PST (Tue Nov 3, 06:00 Shanghai).** Milestones are in `docs/concept.md`.
+
+## Priority #1: win
+
+**We are here to win: top 5, aiming for 1st.** We work overtime and the scope is ambitious on purpose. Judge every decision by one question: does it raise our score on Innovation, Impact, Technical implementation (incl. Codex) or Design, *as seen in the 3-minute video*?
+
+- Scope is the tier list in `docs/concept.md`. **Never start a tier until the previous one works flawlessly in the demo.** A leak that airs on camera loses; a missing Tier 3 feature doesn't.
+- Push for quality, not just "works": polish, reliability and how it looks on stream are what win.
+- If you see something that would clearly raise the score, say so in one line. Don't silently build it.
+
+| Track | Owner |
+|---|---|
+| A: Shield engine | Zakaria |
+| B: Twitch + Twitchy | Salina |
 
 ## Read first
 
@@ -16,7 +29,7 @@ This file is about **how we work**. What we build is in `docs/concept.md`; how i
 | `docs/README.md` | Map of all docs |
 | `docs/concept.md` | What we're building and why |
 | `docs/architecture.md` | Tracks, folders, event contract, stack, conventions |
-| `docs/codex-sessions.md` | Who owns which track; Codex session IDs |
+| `docs/codex-sessions.md` | Codex session IDs per developer |
 | `docs/devpost.md` | Hackathon rules, submission, judging |
 
 ## Roles: Codex builds, Claude supports
@@ -52,7 +65,7 @@ Writing prompts (Codex quota is limited, so every prompt must be worth it):
 
 Two developers work at the same time, each with their own Codex and Claude Code, each owning one track.
 
-- Tracks, their folders and the shared event contract are defined in `docs/architecture.md`. Owners are in `docs/codex-sessions.md`.
+- Tracks, their folders and the shared event contract are defined in `docs/architecture.md`. Owners are listed above.
 - Tracks talk **only** through the shared contract. Contract changes come **first**: agree, commit, then build against it. Mock the other side until it's ready.
 - Flag every contract change to both developers and in the commit body.
 - If a task doesn't fit one track, propose the split explicitly before starting.
@@ -70,8 +83,8 @@ Two developers work at the same time, each with their own Codex and Claude Code,
 
 ## Quality bar
 
-- **Don't add features that weren't asked for.** Suggest them in one line instead.
-- Reliability over breadth.
+- **Build what the current tier and the prompt ask for, nothing else.** Ideas outside the tier list get suggested in one line.
+- Reliability first: within a tier, a feature that never fails beats two that sometimes do.
 - Run and test before committing; never commit a broken build.
 - Small focused modules, clear names, no dead or commented-out code, no premature abstraction.
 - Secrets only in `.env`, never committed.
