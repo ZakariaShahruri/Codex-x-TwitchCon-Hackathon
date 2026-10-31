@@ -9,7 +9,9 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "obs:setup": "tsx scripts/obs-setup.ts",
-    "test": "tsx --test 'src/**/*.test.ts'",
+    "ocr:build": "node scripts/build-ocr-vision.mjs",
+    "pretest": "node scripts/build-ocr-vision.mjs --if-supported",
+    "test": "tsx --test 'src/**/*.test.ts' 'scripts/**/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
