@@ -83,18 +83,13 @@ OBS capture ──┬──► [~1s render delay] ──► broadcast
 - No Chrome extension, no clipping, no narrator
 - Demo works on one machine, one OBS setup
 
-## Go/no-go test (today)
-OBS delayed scene + undelayed screenshots → OCR → an email typed in a text editor is blurred **before** it appears in the delayed output. If this works, the project is viable.
-
 ## Demo video (3 min)
-1. **Hook:** recreated leak moments (streamer shows a key/email on stream)
+1. **Hook:** streamer shows a key/email on stream
 2. "Introducing… **Twitchy**": mascot reveal
 3. Live: open `.env` on stream → blur lands → Twitchy celebrates → counter ticks
 4. Mod `!panic` from chat
 5. How it works + how we built it with Codex
 6. Outro
-
-> Recreate leaks ourselves; don't use other streamers' real footage.
 
 ---
 
