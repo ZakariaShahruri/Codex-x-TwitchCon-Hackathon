@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
+    "demo:events": "tsx src/web/demo-events.ts",
     "obs:setup": "tsx scripts/obs-setup.ts",
     "ocr:build": "node scripts/build-ocr-vision.mjs",
     "pretest": "node scripts/build-ocr-vision.mjs --if-supported",
@@ -20,6 +21,7 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
-    "obs-websocket-js": "^5.0.8"
+    "obs-websocket-js": "^5.0.8",
+    "ws": "^8.18.0"
   }
 }
