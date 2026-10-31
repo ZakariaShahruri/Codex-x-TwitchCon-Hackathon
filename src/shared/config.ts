@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { parseEnv } from "node:util";
 import type { Box, LeakKind } from "./events.js";
 
 export interface Config {
@@ -22,6 +23,10 @@ const detectorKinds: LeakKind[] = ["api_key", "email", "password", "phone", "car
 const envKeys = ["TWITCH_CLIENT_ID", "TWITCH_BOT_TOKEN", "TWITCH_BOT_USER_ID", "TWITCH_BROADCASTER_ID", "OBS_WS_URL", "OBS_WS_PASSWORD", "OPENAI_API_KEY"] as const;
 type Raw = Omit<Config, "env">;
 
+/** OBS caps one Render Delay filter at 500 ms; obs:setup stacks ceil(delayMs / 500) filters. Above 2 s the frame buffers cost too much GPU memory. */
+export const RENDER_DELAY_FILTER_MAX_MS = 500;
+const MAX_DELAY_MS = 2_000;
+
 function fail(key: string, message: string): never { throw new Error(`Invalid config "${key}": ${message}`); }
 function numberValue(value: unknown, key: string, min: number, max: number, integer = true): number {
   if (typeof value !== "number" || !Number.isFinite(value) || (integer && !Number.isInteger(value)) || value < min || value > max)
@@ -32,7 +37,7 @@ function numberValue(value: unknown, key: string, min: number, max: number, inte
 function validate(value: unknown): Raw {
   if (!value || typeof value !== "object" || Array.isArray(value)) fail("root", "must be a JSON object");
   const raw = value as Record<string, unknown>;
-  const delayMs = numberValue(raw.delayMs, "delayMs", 1, 60_000);
+  const delayMs = numberValue(raw.delayMs, "delayMs", 1, MAX_DELAY_MS);
   const captureIntervalMs = numberValue(raw.captureIntervalMs, "captureIntervalMs", 1, 10_000);
   const safetyMarginMs = numberValue(raw.safetyMarginMs, "safetyMarginMs", 0, 60_000);
   if (captureIntervalMs + safetyMarginMs >= delayMs) fail("delayMs", "must exceed captureIntervalMs + safetyMarginMs");
@@ -52,26 +57,13 @@ function validate(value: unknown): Raw {
     armOnStart: raw.armOnStart, webPort, rulesModel: raw.rulesModel };
 }
 
-function parseEnv(source: string): Record<string, string> {
-  const parsed: Record<string, string> = {};
-  for (const line of source.split(/\r?\n/)) {
-    const match = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
-    if (match && envKeys.includes(match[1] as typeof envKeys[number])) {
-      let value = match[2];
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
-      parsed[match[1]] = value;
-    }
-  }
-  return parsed;
-}
-
 export async function loadConfig(options: { configPath?: string; envPath?: string } = {}): Promise<Config> {
   const configPath = options.configPath ?? "twitchy.config.json";
   let json: unknown;
   try { json = JSON.parse(await readFile(configPath, "utf8")); }
   catch (error) { throw new Error(`Could not load ${configPath}: ${error instanceof Error ? error.message : String(error)}`); }
   const rawEnv = options.envPath === undefined ? ".env" : options.envPath;
-  let fileEnv: Record<string, string> = {};
+  let fileEnv: NodeJS.Dict<string> = {};
   try { fileEnv = parseEnv(await readFile(rawEnv, "utf8")); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error(`Could not load ${rawEnv}: ${error instanceof Error ? error.message : String(error)}`);

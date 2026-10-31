@@ -43,6 +43,7 @@ Scene "Twitchy Broadcast"   ← what goes to Twitch (top of list = drawn on top)
 - The engine screenshots **`Twitchy Raw` itself** (undelayed) at canvas resolution, so OCR coordinates are canvas coordinates. No mapping needed.
 - **Masks are not delayed:** they appear immediately, covering the region slightly *before* the secret airs.
 - **The overlay is delayed like the content**, so Twitchy's animation lands exactly when viewers would have seen the secret.
+- **Render Delay is capped at 500 ms per filter** (OBS source, `plugins/obs-filters/gpu-delay.c`). `delayMs` is reached by stacking `ceil(delayMs / 500)` filters (1000 ms = 2 filters) on both `Twitchy Raw` and `Twitchy Overlay`. Each filter buffers frames in GPU memory (about 0.5 GB per second of delay at 1080p60, per source), so the config caps `delayMs` at 2000.
 - **Audio:** Render Delay delays video only. Set the same delay as Sync Offset on audio sources, or mouths and screens drift.
 - `npm run obs:setup` (and the dashboard's setup wizard, which calls the same code) creates this layout via obs-websocket: scenes, mask pool, filters.
 
@@ -75,6 +76,8 @@ Scene "Twitchy Broadcast"   ← what goes to Twitch (top of list = drawn on top)
 
 One Node process (`npm run dev`) boots both tracks and wires them through an in-process typed event bus. The overlay and dashboard are browser pages connected over WebSocket.
 
+Each track's `index.ts` exports `start: StartTrack` (`src/shared/track.ts`): it starts, subscribes to the bus and returns a `stop()` that closes everything it opened (sockets, child processes, timers). `src/index.ts` calls the stops in reverse order on Ctrl+C / SIGTERM, and on a failed start. Async bus listeners are fine: a rejected promise is logged, never crashes the process.
+
 ### Folders and ownership
 
 | Track | Owner | Owns | Folders |
@@ -97,7 +100,8 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 | `engine.metrics` | A → B | `{ lastFrameMs, p95FrameMs, budgetMs, framesPerSec, at }` (every second) |
 | `rules.compiled` | A → B | `{ requestId, ok, rules?: RuleSummary[], error? }` |
 | `shield.command` | B → A | `{ action: 'on' \| 'off' \| 'panic' \| 'unblur', by, at }` |
-| `config.updated` | B → A | `{ watchlistChanged?, enabledDetectors?, sensitiveRegions?, rules? }` (from the dashboard; watchlist values stay local and are never in events) |
+| `private.state` | A → B | `{ watchlist: {id,label}[], rules: RuleSummary[], at }` (saved watchlist and rules **without values**; at startup and after every change) |
+| `config.updated` | B → A | `{ watchlist?: { add?: {label,value}[], removeIds? }, enabledDetectors?, sensitiveRegions?, removedRuleIds? }` (from the dashboard) |
 | `rules.compile` | B → A | `{ requestId, text }` (plain-English rule from the dashboard) |
 
 - `kind`: `'api_key' | 'email' | 'password' | 'phone' | 'card' | 'ip' | 'seed_phrase' | 'qr_code' | 'watchlist' | 'custom_rule' | 'sensitive_region'`
@@ -105,7 +109,10 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 - `preview`: redacted label only, e.g. `"sk-…9aF"`, `"j…@gmail.com"`, `"watchlist: home address"`. **Secrets and watchlist values never leave the machine and never appear in events to the overlay, chat, logs or files** (watchlist lives only in `twitchy.private.json`).
 - `at`: epoch ms, for latency logs.
 
-`RuleSummary` is intentionally minimal and redacted: `{ id, description, detector }`. It must not contain rule source text, secrets, or watchlist values. `config.updated.watchlistChanged` signals a local watchlist update; the values themselves remain in the private file and are never emitted. `leak.detected.preview` is a `RedactedPreview` and may contain only a safe label, never detected content. Configuration validation accepts positive integer `delayMs` (up to 60,000), `captureIntervalMs` (up to 10,000), `maskPoolSize` (1–256), and `webPort` (1–65,535); `safetyMarginMs` is 0–60,000. The loader also requires `delayMs > captureIntervalMs + safetyMarginMs`, boolean `armOnStart`, recognized `enabledDetectors`, finite sensitive-region coordinates with positive dimensions, and a non-empty `rulesModel`. These ranges make invalid timing and resource settings fail early while allowing the documented operating budget.
+- `RuleSummary`: `{ id, description, detector }`. Never contains rule source text, secrets or watchlist values.
+- `preview` is typed `RedactedPreview`; build it with `redacted(label)` from `events.ts`, only from text that contains no detected content.
+- **Watchlist values** travel only dashboard → web bridge → `config.updated` → Track A, in-process, and are never logged. **Track A is the only writer of `twitchy.private.json`** (watchlist and compiled rules) and reports what's saved through `private.state`, labels only.
+- **Browser boundary:** the web bridge forwards only the events in `browserEvents` (`events.ts`, all A → B). B → A events never reach a browser.
 
 ### Command semantics
 - `on` / `off`: arm or disarm detection. Masks already placed still expire normally.
@@ -125,7 +132,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 - **Detectors:** pure functions `(ocrResult) → Leak[]`, one file each, unit-tested with fixture strings.
   - Tier 1: `api_key` (known prefixes `sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox[bp]-`, JWT `eyJ…`, plus long high-entropy tokens) · `email` · `password` (values next to password/secret labels, `KEY=value` lines) · `sensitive_region` (always-masked areas from config)
   - Tier 2: `phone` · `card` (13–19 digits, Luhn-checked) · `ip` (public IPv4/IPv6) · `seed_phrase` (≥ 12 consecutive BIP39 words) · `qr_code` (any QR; masks the whole code) · `watchlist` (normalized, fuzzy to tolerate OCR errors) · `custom_rule` (compiled rules)
-- **Rules compiler** (`src/shield/rules/`): plain-English rule → an OpenAI model with structured output → typed rules (keywords, regex, watchlist entries, window titles) + positive/negative examples → validated (regexes compile, examples pass) → saved to `twitchy.private.json` → `rules.compiled`. Runs once per rule, **never per frame**.
+- **Rules compiler** (`src/shield/rules/`): plain-English rule → an OpenAI model with structured output → typed rules (keywords, regex, watchlist entries, window titles) + positive/negative examples → validated (regexes compile, examples pass) → saved to `twitchy.private.json` → `rules.compiled`. Runs once per rule, **never per frame**. The model is `rulesModel` in config; the default `gpt-4o-mini` is a placeholder: before building the compiler, list the models the key can use (`GET /v1/models`) and pick the newest small model that supports structured outputs.
 - **Masks:** lifetime rule from §2; merge overlapping boxes; pad a few pixels.
 - **Leak Gauntlet** (`tools/gauntlet/`): local page shown in `Twitchy Raw` that flashes 20+ secrets of every kind, each with a known appear time; the engine logs detection time; prints block rate and p50/p95 latency. Also our regression test before every demo take.
 - **Degraded:** OBS disconnect, OCR failure or over-budget frames → `shield.state degraded` with a reason. Detection keeps trying; `!panic` still works.
@@ -139,7 +146,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 - Handle `session_keepalive`, `session_reconnect` and revocations. The example chatbot guide doesn't, and a dropped socket mid-demo kills the commands.
 - **Chat:** `POST https://api.twitch.tv/helix/chat/messages`. Batch leak announcements (at most one message every few seconds). Commands: mod-only `!shield on/off`, `!panic`, `!unblur`; everyone: `!twitchy` (stats) and cheering after a save (Twitchy reacts on the overlay).
 - **Auth:** user access token for the bot account with `user:read:chat`, `user:write:chat`, `user:bot`. If the bot isn't the broadcaster, the broadcaster grants `channel:bot` or mods the bot. Token goes in `.env`; README explains getting one (Twitch CLI).
-- **Web server** (`src/web/`): serves `web/overlay/` and `web/dashboard/` over HTTP and bridges bus events over WebSocket. Only listens on localhost.
+- **Web server** (`src/web/`): serves `web/overlay/` and `web/dashboard/` over HTTP and bridges bus events over WebSocket. Only listens on localhost. Forwards only `browserEvents` to pages, and replays the latest `shield.state`, `private.state` and leak count to a page when it connects, so a reloaded overlay or dashboard is never blank.
 - **Overlay** (`web/overlay/`): plain HTML/CSS/JS, sprite sheets in `web/overlay/assets/`. Canvas = OBS canvas size, so `box` coordinates are used as-is.
   - States: `off` sleeping · `armed` idle guarding · `degraded` worried · `panic` alarm.
   - On `leak.detected`: jumps to the box, a reaction per `kind` (shield bash for keys, hides the house for addresses, eats QR codes…), counter ticks.
@@ -160,12 +167,12 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 ## 8. Configuration
 
 - `.env` (never committed; `.env.example` kept current): `TWITCH_CLIENT_ID`, `TWITCH_BOT_TOKEN`, `TWITCH_BOT_USER_ID`, `TWITCH_BROADCASTER_ID`, `OBS_WS_URL`, `OBS_WS_PASSWORD`, `OPENAI_API_KEY`
-- `twitchy.config.json` (committed defaults): `delayMs`, `captureIntervalMs`, `safetyMarginMs`, `maskPoolSize`, `enabledDetectors`, `sensitiveRegions`, `armOnStart`, `webPort`, `rulesModel`
+- `twitchy.config.json` (committed defaults): `delayMs`, `captureIntervalMs`, `safetyMarginMs`, `maskPoolSize`, `enabledDetectors`, `sensitiveRegions`, `armOnStart`, `webPort`, `rulesModel`. Validated at startup with a message naming the bad key; `delayMs` must exceed `captureIntervalMs + safetyMarginMs` and be at most 2000 (§2).
 - `twitchy.private.json` (gitignored): watchlist and compiled rules
 
 ## 9. Verify first (go/no-go, Saturday night)
 
-1. **Render Delay limit:** OBS caps the Render Delay filter (500 ms per filter at time of writing). Confirm whether stacking two filters gives ~1 s. If not, the whole budget in §1 must fit in 500 ms.
+1. **Render Delay stacking:** the 500 ms cap per filter is confirmed in OBS source. Confirm in OBS that two stacked filters on `Twitchy Raw` give ~1 s (film a stopwatch next to the preview). If not, set `delayMs` to 500 and fit the whole budget in §1 into it.
 2. **OCR latency:** Apple Vision text + barcode pass on a 1080p frame of an editor showing `.env`, measured end to end. Must fit the budget.
 3. **End to end:** type an email into a text editor in `Twitchy Raw` → the mask is on screen in `Twitchy Broadcast` before the delayed frame shows the email. Record it; this clip is the core of the demo.
 

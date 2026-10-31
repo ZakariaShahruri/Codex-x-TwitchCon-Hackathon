@@ -23,6 +23,19 @@ test("isolates listener errors and continues emitting", () => {
   assert.equal(called, true);
 });
 
+test("isolates rejected async listeners", async () => {
+  const bus = new EventBus();
+  const errors: unknown[] = [];
+  const oldError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args[1]); };
+  try {
+    bus.on("leak.cleared", async () => { throw new Error("twitch api down"); });
+    bus.emit("leak.cleared", { id: "x", at: 1 });
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally { console.error = oldError; }
+  assert.equal((errors[0] as Error).message, "twitch api down");
+});
+
 test("off removes a listener", () => {
   const bus = new EventBus();
   let count = 0;

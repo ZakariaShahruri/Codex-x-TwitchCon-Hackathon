@@ -1,4 +1,6 @@
-import type { EventBus } from "../shared/bus.js";
-import type { Config } from "../shared/config.js";
+import type { StartTrack } from "../shared/track.js";
 
-export function start(_bus: EventBus, _config: Config): void { console.log("track A ready"); }
+export const start: StartTrack = async () => {
+  console.log("track A (shield) ready");
+  return async () => {};
+};

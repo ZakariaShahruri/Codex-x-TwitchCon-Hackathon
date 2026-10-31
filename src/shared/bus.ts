@@ -1,8 +1,8 @@
 import type { EventMap, EventName } from "./events.js";
 
-type Listener<T> = (payload: T) => void;
+type Listener<T> = (payload: T) => void | Promise<void>;
 
-/** Synchronous in-process event bus. Listener failures are logged and isolated. */
+/** Synchronous in-process event bus. Listener failures, sync or async, are logged and isolated. */
 export class EventBus {
   private readonly listeners = new Map<EventName, Set<Listener<never>>>();
 
@@ -20,11 +20,12 @@ export class EventBus {
   }
 
   emit<K extends EventName>(event: K, payload: EventMap[K]): void {
+    const report = (error: unknown) => console.error(`[event bus] listener for ${event} failed:`, error);
     for (const listener of this.listeners.get(event) ?? []) {
       try {
-        (listener as Listener<EventMap[K]>)(payload);
+        (listener as Listener<EventMap[K]>)(payload)?.catch(report);
       } catch (error) {
-        console.error(`[event bus] listener for ${event} failed:`, error);
+        report(error);
       }
     }
   }
