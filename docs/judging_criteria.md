@@ -1,4 +1,0 @@
-- Innovation/Idea: How creative and novel is the concept and does the project differ from existing concepts?
-- Potential Impact: How useful or entertaining is it for streamers and their communities?
-- Technological implementation: How well is it built, and how well does it use Codex?
-- Design: Is it easy to use and fun to watch?
