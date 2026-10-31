@@ -37,10 +37,11 @@ Scene "Twitchy Broadcast"   ← what goes to Twitch (top of list = drawn on top)
  ├─ Twitchy Overlay   browser source, Render Delay = delayMs   (Track B)
  ├─ Mask 1..N         opaque color sources, NOT delayed          (Track A)
  └─ Twitchy Raw       scene source, Render Delay = delayMs
-                        └─ the streamer's actual content (display/window capture, camera…)
+      └─ Twitchy Content   scene source, NO filters  ← the engine screenshots this
+            └─ the streamer's actual content (display/window capture, camera…)
 ```
 
-- The engine screenshots **`Twitchy Raw` itself** (undelayed) at canvas resolution, so OCR coordinates are canvas coordinates. No mapping needed.
+- The engine screenshots **`Twitchy Content`** at canvas resolution, so OCR coordinates are canvas coordinates. No mapping needed. It must not be `Twitchy Raw`: `GetSourceScreenshot` renders a source *with its filters* (`obs_source_video_render`), so a screenshot of `Twitchy Raw` would already be delayed. The delay filters live on the wrapper scene only.
 - **Masks are not delayed:** they appear immediately, covering the region slightly *before* the secret airs.
 - **The overlay is delayed like the content**, so Twitchy's animation lands exactly when viewers would have seen the secret.
 - **Render Delay is capped at 500 ms per filter** (OBS source, `plugins/obs-filters/gpu-delay.c`). `delayMs` is reached by stacking `ceil(delayMs / 500)` filters (1000 ms = 2 filters) on both `Twitchy Raw` and `Twitchy Overlay`. Each filter buffers frames in GPU memory (about 0.5 GB per second of delay at 1080p60, per source), so the config caps `delayMs` at 2000.
@@ -63,7 +64,7 @@ Scene "Twitchy Broadcast"   ← what goes to Twitch (top of list = drawn on top)
                           └──────▲────────────────────────▲─────┘
   Track A: src/shield/ …         │                        │        Track B: src/twitch/, src/web/, web/
  ┌───────────────────────────────┴──┐               ┌─────┴──────────────────────────────────────┐
- │ capture → screenshot Twitchy Raw │ leak.*        │ eventsub → chat, stream.online/offline     │
+ │ capture → screenshot Content     │ leak.*        │ eventsub → chat, stream.online/offline     │
  │ diff    → skip unchanged frames  │ shield.state  │ commands → !shield, !panic, !unblur,       │
  │ ocr     → text + boxes + QR      │ engine.metrics│            !twitchy, cheers                │
  │ detect  → leak boxes             │ rules.compiled│ chat     → announcements, stream report    │
@@ -124,7 +125,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 
 ## 5. Track A: shield engine (Zakaria)
 
-- **Capture:** `GetSourceScreenshot` on `Twitchy Raw`, PNG, canvas resolution, every `captureIntervalMs`. Never overlap captures; if one is still processing, skip the tick.
+- **Capture:** `GetSourceScreenshot` on `Twitchy Content` (never `Twitchy Raw`, see §2), PNG, canvas resolution, every `captureIntervalMs`. Never overlap captures; if one is still processing, skip the tick.
 - **Diff:** cheap downscaled hash; identical → skip OCR, refresh boxes.
 - **OCR:** behind one interface, `recognize(png) → { text, box }[]` plus `barcodes(png) → { payload, box }[]`.
   - Primary: **Apple Vision** (text recognition + barcode detection in one pass) via a small Swift helper in `tools/ocr-vision/`, kept running and fed frames over stdin (no process spawn per frame).
@@ -134,7 +135,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
   - Tier 2: `phone` · `card` (13–19 digits, Luhn-checked) · `ip` (public IPv4/IPv6) · `seed_phrase` (≥ 12 consecutive BIP39 words) · `qr_code` (any QR; masks the whole code) · `watchlist` (normalized, fuzzy to tolerate OCR errors) · `custom_rule` (compiled rules)
 - **Rules compiler** (`src/shield/rules/`): plain-English rule → an OpenAI model with structured output → typed rules (keywords, regex, watchlist entries, window titles) + positive/negative examples → validated (regexes compile, examples pass) → saved to `twitchy.private.json` → `rules.compiled`. Runs once per rule, **never per frame**. The model is `rulesModel` in config; the default `gpt-4o-mini` is a placeholder: before building the compiler, list the models the key can use (`GET /v1/models`) and pick the newest small model that supports structured outputs.
 - **Masks:** lifetime rule from §2; merge overlapping boxes; pad a few pixels.
-- **Leak Gauntlet** (`tools/gauntlet/`): local page shown in `Twitchy Raw` that flashes 20+ secrets of every kind, each with a known appear time; the engine logs detection time; prints block rate and p50/p95 latency. Also our regression test before every demo take.
+- **Leak Gauntlet** (`tools/gauntlet/`): local page shown in `Twitchy Content` that flashes 20+ secrets of every kind, each with a known appear time; the engine logs detection time; prints block rate and p50/p95 latency. Also our regression test before every demo take.
 - **Degraded:** OBS disconnect, OCR failure or over-budget frames → `shield.state degraded` with a reason. Detection keeps trying; `!panic` still works.
 
 ## 6. Track B: Twitch + Twitchy (Salina)
@@ -175,7 +176,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 
 1. **Render Delay stacking:** the 500 ms cap per filter is confirmed in OBS source. Confirm in OBS that two stacked filters on `Twitchy Raw` give ~1 s (film a stopwatch next to the preview). If not, set `delayMs` to 500 and fit the whole budget in §1 into it.
 2. **OCR latency:** Apple Vision text + barcode pass on a 1080p frame of an editor showing `.env`, measured end to end. Must fit the budget.
-3. **End to end:** type an email into a text editor in `Twitchy Raw` → the mask is on screen in `Twitchy Broadcast` before the delayed frame shows the email. Record it; this clip is the core of the demo.
+3. **End to end:** type an email into a text editor in `Twitchy Content` → the mask is on screen in `Twitchy Broadcast` before the delayed frame shows the email. Record it; this clip is the core of the demo.
 
 ## 10. Out of scope
 
