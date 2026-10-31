@@ -97,13 +97,15 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 | `engine.metrics` | A → B | `{ lastFrameMs, p95FrameMs, budgetMs, framesPerSec, at }` (every second) |
 | `rules.compiled` | A → B | `{ requestId, ok, rules?: RuleSummary[], error? }` |
 | `shield.command` | B → A | `{ action: 'on' \| 'off' \| 'panic' \| 'unblur', by, at }` |
-| `config.updated` | B → A | `{ watchlist?, enabledDetectors?, sensitiveRegions?, rules? }` (from the dashboard) |
+| `config.updated` | B → A | `{ watchlistChanged?, enabledDetectors?, sensitiveRegions?, rules? }` (from the dashboard; watchlist values stay local and are never in events) |
 | `rules.compile` | B → A | `{ requestId, text }` (plain-English rule from the dashboard) |
 
 - `kind`: `'api_key' | 'email' | 'password' | 'phone' | 'card' | 'ip' | 'seed_phrase' | 'qr_code' | 'watchlist' | 'custom_rule' | 'sensitive_region'`
 - `box`: canvas pixels
 - `preview`: redacted label only, e.g. `"sk-…9aF"`, `"j…@gmail.com"`, `"watchlist: home address"`. **Secrets and watchlist values never leave the machine and never appear in events to the overlay, chat, logs or files** (watchlist lives only in `twitchy.private.json`).
 - `at`: epoch ms, for latency logs.
+
+`RuleSummary` is intentionally minimal and redacted: `{ id, description, detector }`. It must not contain rule source text, secrets, or watchlist values. `config.updated.watchlistChanged` signals a local watchlist update; the values themselves remain in the private file and are never emitted. `leak.detected.preview` is a `RedactedPreview` and may contain only a safe label, never detected content. Configuration validation accepts positive integer `delayMs` (up to 60,000), `captureIntervalMs` (up to 10,000), `maskPoolSize` (1–256), and `webPort` (1–65,535); `safetyMarginMs` is 0–60,000. The loader also requires `delayMs > captureIntervalMs + safetyMarginMs`, boolean `armOnStart`, recognized `enabledDetectors`, finite sensitive-region coordinates with positive dimensions, and a non-empty `rulesModel`. These ranges make invalid timing and resource settings fail early while allowing the documented operating budget.
 
 ### Command semantics
 - `on` / `off`: arm or disarm detection. Masks already placed still expire normally.

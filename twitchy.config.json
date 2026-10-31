@@ -1,0 +1,11 @@
+{
+  "delayMs": 1000,
+  "captureIntervalMs": 150,
+  "safetyMarginMs": 100,
+  "maskPoolSize": 12,
+  "enabledDetectors": ["api_key", "email", "password", "sensitive_region"],
+  "sensitiveRegions": [],
+  "armOnStart": true,
+  "webPort": 4173,
+  "rulesModel": "gpt-4o-mini"
+}
