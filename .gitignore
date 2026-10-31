@@ -1,5 +1,6 @@
 node_modules/
 dist/
+tools/ocr-vision/.build/
 .env
 twitchy.private.json
 .DS_Store

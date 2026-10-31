@@ -46,7 +46,7 @@ Scene "Twitchy Broadcast"   ← what goes to Twitch (top of list = drawn on top)
 - **The overlay is delayed like the content**, so Twitchy's animation lands exactly when viewers would have seen the secret.
 - **Render Delay is capped at 500 ms per filter** (OBS source, `plugins/obs-filters/gpu-delay.c`). `delayMs` is reached by stacking `ceil(delayMs / 500)` filters (1000 ms = 2 filters) on both `Twitchy Raw` and `Twitchy Overlay`. Each filter buffers frames in GPU memory (about 0.5 GB per second of delay at 1080p60, per source), so the config caps `delayMs` at 2000.
 - **Audio:** Render Delay delays video only. Set the same delay as Sync Offset on audio sources, or mouths and screens drift.
-- `npm run obs:setup` (and the dashboard's setup wizard, which calls the same code) creates this layout via obs-websocket: scenes, mask pool, filters.
+- `npm run obs:setup` (and the dashboard's setup wizard, which calls the same code) creates this layout via obs-websocket: scenes, mask pool, filters. Pass `-- --content-scene "Scene Name"` to select the content scene on first setup; otherwise it nests the current program scene. Existing content choices are preserved on later runs. The command leaves the active program scene unchanged, reports each source it found or created, and leaves masks disabled. Afterward, switch the stream output to `Twitchy Broadcast` manually and set the audio sync offset.
 
 ### Masks
 - **Style:** opaque pixel-art censor block. Opaque is safer than blur (blurred text can sometimes be recovered) and needs no OBS plugins. A blur look is Tier 3.
