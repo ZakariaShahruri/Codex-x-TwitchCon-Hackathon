@@ -1,5 +1,7 @@
 # Twitchy — Stream Shield
 
+[![CI](https://github.com/ZakariaShahruri/Codex-x-TwitchCon-Hackathon/actions/workflows/ci.yml/badge.svg)](https://github.com/ZakariaShahruri/Codex-x-TwitchCon-Hackathon/actions/workflows/ci.yml)
+
 ## Run it
 
 Requirements: Node.js 22+ and npm.

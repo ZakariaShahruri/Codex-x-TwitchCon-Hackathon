@@ -75,6 +75,7 @@ Two developers work at the same time, each with their own Codex and Claude Code,
 - `git pull --rebase` before starting work and before every push.
 - Commit and push small and often: after every working unit, not at the end of the day.
 - Never force-push `main` or rewrite shared history.
+- CI (`typecheck` + `test`) runs on every push to `main`. If your push turns it red, fixing it comes before anything else.
 - Merge conflict in code you didn't write: stop, show it, and ask. Don't resolve it blindly.
 - When a decision changes (scope, architecture, conventions), update the relevant doc in the same commit.
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`); subject imperative, lowercase, under ~60 characters, no trailing period. Example: `feat: mask detected api keys before broadcast`.

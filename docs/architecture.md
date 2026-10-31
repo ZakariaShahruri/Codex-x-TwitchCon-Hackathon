@@ -162,6 +162,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 - **Libraries:** `obs-websocket-js` (OBS 28+ has obs-websocket v5 built in), `ws` for the web WebSocket server, `openai` for the rules compiler only. EventSub uses Node's built-in WebSocket client. Anything else: justify it in the commit.
 - **Tests:** `node:test`. Detectors, watchlist matching and mask lifetime logic must have unit tests; the engine has a fixture test (screenshot of a fake `.env` → expected boxes); the Leak Gauntlet is the end-to-end test.
 - **Errors:** handle at the boundaries (obs-websocket, OCR helper, OpenAI, Twitch API, EventSub) with log lines that say what failed and what happens next.
+- **CI** (`.github/workflows/ci.yml`): every push to `main` and every PR runs `npm ci`, `npm run typecheck` and `npm test` on Ubuntu. It must stay green. When `tools/ocr-vision/` lands, Track A adds a `macos-latest` job that builds the Swift helper and runs the OCR fixture test.
 - **Logging:** per-frame timing line in debug mode: `capture 34ms · ocr 141ms · detect 2ms · mask 6ms · total 183ms`.
 
 ## 8. Configuration
