@@ -2,14 +2,13 @@ import type { OCRTextLine } from "../ocr/types.js";
 import { candidatesForRanges, compactText, normalizeLabel, originalRangeToCompact } from "./text.js";
 import type { LeakCandidate, TextRange } from "./types.js";
 
-/** `label = value`, `label: value`, `label := value` and `"label": "value"`, but not `label == value` or `label => value`. */
-const PASSWORD_ASSIGNMENT = /(?:^|[^A-Z0-9_])([A-Z][A-Z0-9_-]{0,63})["']?\s*(?::=|[:=](?![=>]))\s*(?:"([^"\r\n]{1,160})"|'([^'\r\n]{1,160})'|([^#\r\n]{1,160}))/gi;
+const ASSIGNMENT_LABEL = /[A-Z][A-Z0-9_-]{0,63}/gi;
 /** `scheme://user:password@host`; matched on compact text because Vision puts a space after the colon. */
 const URL_CREDENTIAL = /[A-Z][A-Z0-9+.-]*:\/\/[^/:@\s]+:([^/@\s]+)@/gi;
 const PROSE_START = /^(?:please|use|never|do|don't|should|must|keep|store|enter|type|your|the|this|that|is|are|can|remember|avoid|change|set|example)\b/i;
 const TYPE_NAMES = /^(?:string|number|boolean|bool|str|int|bytes|any|unknown|object|none|null|undefined|nil|true|false|optional\[.*\]|string\s*\|\s*undefined)$/i;
 const CODE_ROOT = /^(?:process\.env|import\.meta\.env|os\.environ|env|config|settings|req|request|this|self|form|user|args|options|opts|params|props|data|body|input|ctx)\./i;
-const PLACEHOLDER =/^(?:[*•●·]{3,}|x{3,}|<[^>]*>|\[[A-Z_ -]+\]|\$\{.*\}|\$[A-Z_][A-Z0-9_]*|notset|changeme|redacted|hidden)$/i;
+const PLACEHOLDER =/^(?:[*•●·]{3,}|x{3,}|<[^>]*>|\[[A-Z_ -]+\]|\$\{\{.*\}\}|\$\{.*\}|\$[A-Z_][A-Z0-9_]*|notset|changeme|redacted|hidden)$/i;
 
 function isPasswordLabel(rawLabel: string): boolean {
   const label = normalizeLabel(rawLabel);
@@ -33,17 +32,36 @@ function isCodeOrPlaceholder(value: string): boolean {
 
 function assignmentRanges(line: OCRTextLine): TextRange[] {
   const ranges: TextRange[] = [];
-  for (const match of line.text.matchAll(PASSWORD_ASSIGNMENT)) {
-    const label = match[1];
+  for (const match of line.text.matchAll(ASSIGNMENT_LABEL)) {
+    const label = match[0];
     if (!label || !isPasswordLabel(label) || match.index === undefined) continue;
-    const quoted = match[2] ?? match[3];
-    const value = quoted ?? match[4];
-    if (value === undefined) continue;
+    let cursor = match.index + label.length;
+    if (line.text[cursor] === "\"" || line.text[cursor] === "'") cursor += 1;
+    while (/\s/u.test(line.text[cursor] ?? "")) cursor += 1;
+    if (line.text.startsWith(":=", cursor)) cursor += 2;
+    else if (line.text[cursor] === ":" || line.text[cursor] === "=") {
+      if (line.text[cursor + 1] === "=" || line.text[cursor + 1] === ">") continue;
+      cursor += 1;
+    } else continue;
+    while (/\s/u.test(line.text[cursor] ?? "")) cursor += 1;
+
+    const quote = line.text[cursor] === "\"" || line.text[cursor] === "'" ? line.text[cursor] : undefined;
+    const valueStart = quote ? cursor + 1 : cursor;
+    let valueEnd: number;
+    if (quote) {
+      valueEnd = line.text.indexOf(quote, valueStart);
+      if (valueEnd < 0) continue;
+    } else {
+      const valueTail = line.text.slice(valueStart);
+      const delimiters = valueTail.startsWith("${") ? /[;,#\r\n]/u : /[;,#}\]\r\n]/u;
+      valueEnd = valueTail.search(delimiters);
+      valueEnd = valueEnd < 0 ? line.text.length : valueStart + valueEnd;
+    }
+    const value = line.text.slice(valueStart, valueEnd);
     const trimmed = value.trim().replace(/\s+(?:#|\/\/).*$/, "").trim();
-    if (!trimmed || PLACEHOLDER.test(trimmed)) continue;
-    if (quoted === undefined && (isCodeOrPlaceholder(trimmed) || PROSE_START.test(trimmed))) continue;
-    const valueOffset = match[0].lastIndexOf(value);
-    const range = originalRangeToCompact(line.text, match.index + valueOffset, match.index + valueOffset + value.length);
+    if (!trimmed || TYPE_NAMES.test(trimmed) || PLACEHOLDER.test(trimmed)) continue;
+    if (!quote && (isCodeOrPlaceholder(trimmed) || PROSE_START.test(trimmed))) continue;
+    const range = originalRangeToCompact(line.text, valueStart, valueEnd);
     if (range) ranges.push(range);
   }
   return ranges;

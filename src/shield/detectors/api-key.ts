@@ -3,17 +3,17 @@ import { candidatesForRanges, compactText, normalizeLabel, originalRangeToCompac
 import type { LeakCandidate, TextRange } from "./types.js";
 
 const PREFIX_PATTERNS: RegExp[] = [
-  /(?<![A-Z0-9_])sk-(?:proj-|ant-)?[A-Z0-9_-]{20,}/gi,
-  /(?<![A-Z0-9_])(?:sk|rk)_(?:live|test)_[A-Z0-9]{16,}/gi,
-  /(?<![A-Z0-9_])gh[opsur]_[A-Z0-9]{20,}/gi,
-  /(?<![A-Z0-9_])github_pat_[A-Z0-9_]{20,}/gi,
-  /(?<![A-Z0-9_])glpat-[A-Z0-9_-]{20,}/gi,
-  /(?<![A-Z0-9_])AKIA[A-Z0-9]{16}(?![A-Z0-9])/gi,
-  /(?<![A-Z0-9_])AIza[A-Z0-9_-]{35}/gi,
-  /(?<![A-Z0-9_])xox[abprs]-[A-Z0-9-]{20,}/gi,
-  /(?<![A-Z0-9_])hf_[A-Z0-9]{30,}/gi,
-  /(?<![A-Z0-9_])npm_[A-Z0-9]{36,}/gi,
-  /(?<![A-Z0-9_])eyJ[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}(?![A-Z0-9_-])/g,
+  /sk-(?:proj-|ant-)?[A-Z0-9_-]{20,}/gi,
+  /(?:sk|rk)_(?:live|test)_[A-Z0-9]{16,}/gi,
+  /gh[opsur]_[A-Z0-9]{20,}/gi,
+  /github_pat_[A-Z0-9_]{20,}/gi,
+  /glpat-[A-Z0-9_-]{20,}/gi,
+  /AKIA[A-Z0-9]{16}(?![A-Z0-9])/gi,
+  /AIza[A-Z0-9_-]{35}/gi,
+  /xox[abprs]-[A-Z0-9-]{20,}/gi,
+  /hf_[A-Z0-9]{30,}/gi,
+  /npm_[A-Z0-9]{36,}/gi,
+  /eyJ[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}(?![A-Z0-9_-])/g,
 ];
 
 const CREDENTIAL_ASSIGNMENT = /([A-Z][A-Z0-9_-]{0,63})["']?[:=]["']?([A-Z0-9~._:/+@=-]{16,})/gi;
@@ -47,7 +47,11 @@ function findRanges(line: OCRTextLine): TextRange[] {
   for (const pattern of PREFIX_PATTERNS) {
     for (const match of compact.text.matchAll(pattern)) {
       const start = match.index;
-      if (start !== undefined) ranges.push({ start, end: start + match[0].length });
+      if (start === undefined) continue;
+      const originalStart = compact.sourceOffsets[start];
+      // Whitespace stripped by compactText can otherwise join prose to a token, e.g. "token npm_...".
+      if (originalStart !== undefined && originalStart > 0 && /[A-Z0-9_]/i.test(line.text[originalStart - 1])) continue;
+      ranges.push({ start, end: start + match[0].length });
     }
   }
 

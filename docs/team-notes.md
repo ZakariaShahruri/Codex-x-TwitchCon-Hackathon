@@ -2,6 +2,12 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-02 · Track A detector audit (Zakaria → Salina)
+
+- No event payloads changed. Tier 1 now catches provider tokens shown in ordinary terminal prose (for example, npm's `Invalid token …`) and password properties nested inside TypeScript/JSON object lines.
+- JSON `null` and type placeholders such as `"string"` are ignored as values. These cases should no longer create leak animations.
+- Known gap: if OCR returns a secret split across separate line results (tested with a wrapped API key and email), current detectors do not join those lines and miss the secret. Spaces between OCR words within one line are handled.
+
 ## 2026-11-02 · Track A hardening (Zakaria → Salina)
 
 **No event shapes changed** (`src/shared/events.ts` is untouched), so nothing breaks. You don't need to change anything; this is what you'll see differently.
