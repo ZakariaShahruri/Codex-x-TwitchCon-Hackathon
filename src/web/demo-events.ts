@@ -34,7 +34,7 @@ async function runCycle() {
   for (let index = 0; index < scenarios.length; index += 1) {
     const leak = scenarios[index]!;
     bus.emit("leak.detected", { ...leak, id: `${leak.id}-${base}`, preview: redacted(leak.preview), totalBlocked: base + index + 1, at: at() });
-    await delay(1_150);
+    await delay(index === 0 ? 180 : 1_150);
   }
   for (const leak of scenarios) {
     bus.emit("leak.cleared", { id: `${leak.id}-${base}`, at: at() });

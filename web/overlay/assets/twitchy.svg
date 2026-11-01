@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <defs>
+    <symbol id="body" viewBox="0 0 32 32">
+      <!-- Tiny ear tufts and dark stepped silhouette. -->
+      <path fill="#17172c" d="M6 7h4V4h4v3h8V4h4v5h3v12h-3v6h-4v3H10v-3H7v-5H4V10h2z"/>
+      <path fill="#71e8c2" d="M8 8h3V6h1v4h8V7h2v3h3v10h-2v5h-3v2h-9v-2H9v-5H7v-9h1z"/>
+      <path fill="#4bcba9" d="M9 19h3v3h3v3h-4v-2h-2zM23 13h2v6h-2z"/>
+      <path fill="#a5ffe0" d="M9 11h3v2H9zM21 11h2v2h-2z"/>
+      <!-- Little feet. -->
+      <path fill="#17172c" d="M10 25h5v4h-7v-2h2zM19 25h4v2h2v2h-7v-3h1z"/>
+      <path fill="#ffdc68" d="M11 27h3v1h-4zM20 27h3v1h-3z"/>
+      <!-- Pixel shield held in front. -->
+      <path fill="#17172c" d="M22 16h7v2h2v8h-2v2h-7v-2h-2v-8h2z"/>
+      <path fill="#ffdc68" d="M23 18h6v7l-3 2-3-2z"/>
+      <path fill="#fff0a6" d="M24 19h2v4h-2zM26 23h2v2h-2z"/>
+    </symbol>
+  </defs>
+  <symbol id="off" viewBox="0 0 32 32">
+    <use href="#body"/>
+    <path fill="#17172c" d="M10 13h2v1h2v2h-2v-1h-2zM18 13h2v1h2v2h-2v-1h-2z"/>
+    <path fill="#fff0a6" d="M14 20h4v2h-4z"/>
+  </symbol>
+  <symbol id="armed" viewBox="0 0 32 32">
+    <use href="#body"/>
+    <path fill="#17172c" d="M10 12h4v5h-4zM18 12h4v5h-4z"/>
+    <path fill="#fff" d="M11 12h2v2h-2zM19 12h2v2h-2z"/>
+    <path fill="#17172c" d="M14 20h4v2h-1v1h-2v-1h-1z"/>
+  </symbol>
+  <symbol id="degraded" viewBox="0 0 32 32">
+    <use href="#body"/>
+    <path fill="#17172c" d="M9 12h2v-1h4v2h-2v1h-4zM18 13v-2h4v1h2v2h-4v-1z"/>
+    <path fill="#fff" d="M11 13h2v2h-2zM20 13h2v2h-2z"/>
+    <path fill="#17172c" d="M14 21h4v2h-4z"/>
+    <path fill="#9d8cff" d="M26 8h2v3h-2zM25 9h4v1h-4z"/>
+  </symbol>
+  <symbol id="panic" viewBox="0 0 32 32">
+    <use href="#body"/>
+    <path fill="#17172c" d="M9 11h6v7H9zM17 11h6v7h-6z"/>
+    <path fill="#fff" d="M10 12h4v5h-4zM18 12h4v5h-4z"/>
+    <path fill="#ff648c" d="M11 13h2v3h-2zM19 13h2v3h-2z"/>
+    <path fill="#17172c" d="M14 20h4v4h-4z"/>
+    <path fill="#fff0a6" d="M15 21h2v2h-2z"/>
+    <path fill="#ff648c" d="M4 5h2v3H4zM3 6h4v1H3zM26 4h2v3h-2zM25 5h4v1h-4z"/>
+  </symbol>
+</svg>
