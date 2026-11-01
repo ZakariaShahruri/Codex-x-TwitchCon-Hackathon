@@ -9,6 +9,8 @@ import { startShield } from "../src/shield/index.js";
 const CONTENT = "Twitchy Content";
 const BROADCAST = "Twitchy Broadcast";
 const tempName = `Twitchy Live E2E ${process.pid}`;
+// Opaque black under the fixture, so moving it never exposes the real desktop to OCR.
+const backdropName = `Twitchy Live E2E backdrop ${process.pid}`;
 const fixture = resolve("tools/ocr-vision/fixtures/fake-env-1080p-12px.png");
 const sleep = (ms: number) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 
@@ -39,8 +41,10 @@ async function main(): Promise<void> {
   const logs: string[] = [];
   const frames: CaptureFrame[] = [];
   const clearedAt: number[] = [];
+  const detectedIds: string[] = [];
   const bus = new EventBus();
   bus.on("leak.cleared", ({ at }) => { clearedAt.push(at); });
+  bus.on("leak.detected", ({ id }) => { detectedIds.push(id); });
   const before = await inspect(obs);
   const broadcast = before[BROADCAST]!;
   const masksBefore = broadcast.filter((item) => /^Twitchy Mask \d+$/.test(item.sourceName));
@@ -50,17 +54,25 @@ async function main(): Promise<void> {
   origLog("OBS scene items before:", JSON.stringify(brief(before), null, 2));
 
   let tempId: number | undefined;
+  let backdropId: number | undefined;
   let stopEngine: (() => Promise<void>) | undefined;
   let engineStarted = false;
   let error: unknown;
   try {
+    const video = await obs.call("GetVideoSettings");
+    const backdrop = await obs.call("CreateInput", {
+      sceneName: CONTENT, inputName: backdropName, inputKind: "color_source_v3",
+      inputSettings: { color: 0xff000000, width: video.baseWidth, height: video.baseHeight }, sceneItemEnabled: true,
+    });
+    backdropId = backdrop.sceneItemId;
+    await obs.call("SetSceneItemIndex", { sceneName: CONTENT, sceneItemId: backdropId, sceneItemIndex: before[CONTENT]!.length });
     const created = await obs.call("CreateInput", {
       sceneName: CONTENT, inputName: tempName, inputKind: "image_source",
       inputSettings: { file: fixture, unload: false }, sceneItemEnabled: true,
     });
     tempId = created.sceneItemId;
     // OBS scene item index increases toward the top of the rendered stack.
-    await obs.call("SetSceneItemIndex", { sceneName: CONTENT, sceneItemId: tempId, sceneItemIndex: before[CONTENT]!.length });
+    await obs.call("SetSceneItemIndex", { sceneName: CONTENT, sceneItemId: tempId, sceneItemIndex: before[CONTENT]!.length + 1 });
     const initialSourceTransform = (await obs.call("GetSceneItemTransform", { sceneName: CONTENT, sceneItemId: tempId })).sceneItemTransform;
     origLog("Fixture source added:", tempName, `id=${tempId}`);
 
@@ -141,12 +153,18 @@ async function main(): Promise<void> {
     origLog("Removal verification:", JSON.stringify({ elapsedMs: Date.now() - removedAt,
       leakClearedAfterMs: clearedAt.map((at) => at - removedAt), enabledMasks: 0 }, null, 2));
     assert.ok(Date.now() - removedAt >= config.delayMs, "masks went down less than one delay after removal");
+    assert.equal(detectedIds.length, 5, `expected 5 leak.detected events for the whole run (move included), got ${detectedIds.length}`);
+    origLog("Leak events:", JSON.stringify({ detected: detectedIds.length, cleared: clearedAt.length }));
   } catch (caught) {
     error = caught;
   } finally {
     if (tempId !== undefined) {
       try { await obs.call("RemoveSceneItem", { sceneName: CONTENT, sceneItemId: tempId }); } catch { /* already absent */ }
       try { await obs.call("RemoveInput", { inputName: tempName }); } catch { /* already absent */ }
+    }
+    if (backdropId !== undefined) {
+      try { await obs.call("RemoveSceneItem", { sceneName: CONTENT, sceneItemId: backdropId }); } catch { /* already absent */ }
+      try { await obs.call("RemoveInput", { inputName: backdropName }); } catch { /* already absent */ }
     }
     if (stopEngine) {
       try { await stopEngine(); } catch (caught) { error ??= caught; }
@@ -178,7 +196,7 @@ async function main(): Promise<void> {
   origLog("OBS scene items after:", JSON.stringify(brief(after), null, 2));
   assert.deepEqual(brief(after), brief(before), "scene item list/order/enabled state differs from baseline");
   assert.deepEqual(after, before, "scene transforms differ from baseline");
-  assert.ok(!(after[CONTENT] ?? []).some((item) => item.sourceName === tempName), "temporary fixture source still exists");
+  assert.ok(!(after[CONTENT] ?? []).some((item) => item.sourceName === tempName || item.sourceName === backdropName), "temporary source still exists");
   assert.ok((after[BROADCAST] ?? []).filter((item) => /^Twitchy Mask \d+$/.test(item.sourceName)).every((item) => !item.sceneItemEnabled));
   if (error) throw error;
   origLog("Live E2E completed; OBS scene items restored and all masks disabled.");
