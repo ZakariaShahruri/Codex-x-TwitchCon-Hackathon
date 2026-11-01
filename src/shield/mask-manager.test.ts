@@ -27,36 +27,53 @@ function manager(backend: FakeMasks, extra: Partial<ConstructorParameters<typeof
   });
 }
 
-test("masks refresh through lastSeen + delay + safety margin, then expire", async () => {
+test("a mask lives until the first frame without the text + delay + safety margin", async () => {
   const backend = new FakeMasks();
   const masks = manager(backend, { maskIds: ["m1"] });
   await masks.update([leak("secret-a", { x: 20, y: 30, w: 40, h: 20 })], 100);
   assert.equal(backend.enabled.has("m1"), true);
   await masks.update([leak("secret-a", { x: 24, y: 32, w: 40, h: 20 })], 500);
   assert.deepEqual(backend.boxes.get("m1"), { x: 16, y: 26, w: 52, h: 30 });
-  await masks.expire(1_599);
+  // Still on screen in the last frame: it may stay there until the next capture, so it never expires on its own.
+  await masks.expire(5_000);
   assert.equal(backend.enabled.has("m1"), true);
-  await masks.expire(1_600);
+  // The frame at 5000 is the first proof it is gone; the delayed output shows it until 5000 + 1000 + 100.
+  await masks.update([], 5_000);
+  await masks.expire(6_099);
+  assert.equal(backend.enabled.has("m1"), true);
+  await masks.expire(6_100);
+  assert.equal(backend.enabled.has("m1"), false);
+});
+
+test("a capture gap keeps the mask until a later frame proves the text is gone", async () => {
+  const backend = new FakeMasks();
+  const masks = manager(backend, { maskIds: ["m1"] });
+  await masks.update([leak("secret-a", { x: 20, y: 30, w: 40, h: 20 })], 0);
+  // OBS hiccup: no frames for 3 s. The old rule (lastSeen + 1100) would have dropped the mask at 1100.
+  await masks.expire(3_000);
+  assert.equal(backend.enabled.has("m1"), true);
+  await masks.update([], 3_000);
+  await masks.update([], 4_099);
+  assert.equal(backend.enabled.has("m1"), true);
+  await masks.update([], 4_100);
   assert.equal(backend.enabled.has("m1"), false);
 });
 
 test("pads and merges overlapping boxes", () => {
   assert.deepEqual(planMaskBoxes([
-    { box: { x: 20, y: 30, w: 40, h: 20 }, keepUntil: 10 },
-    { box: { x: 62, y: 35, w: 25, h: 10 }, keepUntil: 20 },
+    { box: { x: 20, y: 30, w: 40, h: 20 } },
+    { box: { x: 62, y: 35, w: 25, h: 10 } },
   ], { width: 200, height: 100, paddingPx: 4, poolSize: 4 }), [
-    { box: { x: 16, y: 26, w: 75, h: 28 }, keepUntil: 20 },
+    { x: 16, y: 26, w: 75, h: 28 },
   ]);
 });
 
 test("pool exhaustion merges boxes into a larger covering mask instead of dropping one", () => {
   const plan = planMaskBoxes([
-    { box: { x: 10, y: 20, w: 20, h: 10 }, keepUntil: 100 },
-    { box: { x: 200, y: 100, w: 30, h: 20 }, keepUntil: 200 },
+    { box: { x: 10, y: 20, w: 20, h: 10 } },
+    { box: { x: 200, y: 100, w: 30, h: 20 } },
   ], { width: 400, height: 300, paddingPx: 4, poolSize: 1 });
-  assert.equal(plan.length, 1);
-  assert.deepEqual(plan[0]!.box, { x: 6, y: 16, w: 228, h: 108 });
-  assert.equal(plan[0]!.keepUntil, 200);
+  assert.deepEqual(plan, [{ x: 6, y: 16, w: 228, h: 108 }]);
 });
 
 test("live pool exhaustion expands an existing mask before releasing no coverage", async () => {
@@ -147,6 +164,7 @@ test("enabled masks survive restart hold and graceful stop for the full delay ho
     maskIds: ["m1"], now: () => 2_000,
     wait: async (ms) => { waited.push(ms); maskStayedUpDuringWait = stoppingBackend.enabled.has("m1"); },
   });
+  // Still on screen at shutdown: it may already be in the delay buffer, so hold a full delay from now.
   await stopping.update([leak("still-buffered", { x: 40, y: 50, w: 30, h: 20 })], 1_900);
   await stopping.stop();
   assert.deepEqual(waited, [1_100]);

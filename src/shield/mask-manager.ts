@@ -8,11 +8,15 @@ export interface MaskBackend {
 
 export interface ExistingMask { id: string; box: Box }
 
+/**
+ * One place where detected text is or was on screen. While the latest frame still shows it, `expiresAt` is
+ * Infinity: the text may stay on screen until the next capture, so the countdown can only start at the first
+ * frame that no longer sees it.
+ */
 interface ActiveBox {
   fingerprint: string;
   box: Box;
   expiresAt: number;
-  lastSeen: number;
   padded: boolean;
 }
 
@@ -20,10 +24,7 @@ interface Slot {
   id: string;
   box?: Box;
   enabled: boolean;
-  keepUntil: number;
 }
-
-interface PlannedBox { box: Box; keepUntil: number }
 
 export interface MaskManagerOptions {
   backend: MaskBackend;
@@ -64,9 +65,9 @@ function valid(box: Box): boolean {
 
 /** Pads and clamps detections, merges intersections, then conservatively combines nearest boxes to fit the pool. */
 export function planMaskBoxes(
-  entries: readonly { box: Box; keepUntil: number; padded?: boolean }[],
+  entries: readonly { box: Box; padded?: boolean }[],
   options: { width: number; height: number; paddingPx: number; poolSize: number },
-): PlannedBox[] {
+): Box[] {
   if (!Number.isInteger(options.poolSize) || options.poolSize < 1) throw new Error("Mask pool must contain at least one mask");
   const clamp = (box: Box): Box => {
     const x = Math.max(0, Math.min(options.width, box.x));
@@ -75,23 +76,20 @@ export function planMaskBoxes(
     const bottom = Math.max(y, Math.min(options.height, box.y + box.h));
     return { x, y, w: right - x, h: bottom - y };
   };
-  let boxes: PlannedBox[] = entries.filter((entry) => valid(entry.box)).map((entry) => {
-    const source = entry.padded ? entry.box : {
-      x: entry.box.x - options.paddingPx,
-      y: entry.box.y - options.paddingPx,
-      w: entry.box.w + options.paddingPx * 2,
-      h: entry.box.h + options.paddingPx * 2,
-    };
-    return { box: clamp(source), keepUntil: entry.keepUntil };
-  }).filter((entry) => valid(entry.box));
+  const boxes: Box[] = entries.filter((entry) => valid(entry.box)).map((entry) => clamp(entry.padded ? entry.box : {
+    x: entry.box.x - options.paddingPx,
+    y: entry.box.y - options.paddingPx,
+    w: entry.box.w + options.paddingPx * 2,
+    h: entry.box.h + options.paddingPx * 2,
+  })).filter(valid);
 
   let merged = true;
   while (merged) {
     merged = false;
     outer: for (let i = 0; i < boxes.length; i += 1) {
       for (let j = i + 1; j < boxes.length; j += 1) {
-        if (!intersects(boxes[i]!.box, boxes[j]!.box)) continue;
-        boxes[i] = { box: union(boxes[i]!.box, boxes[j]!.box), keepUntil: Math.max(boxes[i]!.keepUntil, boxes[j]!.keepUntil) };
+        if (!intersects(boxes[i]!, boxes[j]!)) continue;
+        boxes[i] = union(boxes[i]!, boxes[j]!);
         boxes.splice(j, 1);
         merged = true;
         break outer;
@@ -105,19 +103,16 @@ export function planMaskBoxes(
     let bestCost = Number.POSITIVE_INFINITY;
     for (let i = 0; i < boxes.length; i += 1) {
       for (let j = i + 1; j < boxes.length; j += 1) {
-        const combined = union(boxes[i]!.box, boxes[j]!.box);
-        const overlap = area(boxes[i]!.box) + area(boxes[j]!.box) - area(combined);
+        const combined = union(boxes[i]!, boxes[j]!);
+        const overlap = area(boxes[i]!) + area(boxes[j]!) - area(combined);
         const cost = area(combined) - overlap;
         if (cost < bestCost) { bestCost = cost; bestI = i; bestJ = j; }
       }
     }
-    boxes[bestI] = {
-      box: union(boxes[bestI]!.box, boxes[bestJ]!.box),
-      keepUntil: Math.max(boxes[bestI]!.keepUntil, boxes[bestJ]!.keepUntil),
-    };
+    boxes[bestI] = union(boxes[bestI]!, boxes[bestJ]!);
     boxes.splice(bestJ, 1);
   }
-  return boxes.sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
+  return boxes.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
 /** Owns active detections, their delay-buffer lifetime and the existing OBS mask pool. */
@@ -143,14 +138,13 @@ export class MaskManager {
     this.holdMs = options.delayMs + options.safetyMarginMs;
     this.now = options.now ?? Date.now;
     this.wait = options.wait ?? sleep;
-    this.slots = options.maskIds.map((id) => ({ id, enabled: false, keepUntil: 0 }));
+    this.slots = options.maskIds.map((id) => ({ id, enabled: false }));
     for (const [index, existing] of (options.existingMasks ?? []).entries()) {
       const slot = this.slots.find((item) => item.id === existing.id);
       if (!slot || !valid(existing.box)) continue;
       slot.box = { ...existing.box };
       slot.enabled = true;
-      slot.keepUntil = this.now() + this.holdMs;
-      this.active.push({ fingerprint: `restart-mask-${index}`, box: { ...existing.box }, lastSeen: this.now(), expiresAt: slot.keepUntil, padded: true });
+      this.active.push({ fingerprint: `restart-mask-${index}`, box: { ...existing.box }, expiresAt: this.now() + this.holdMs, padded: true });
       if (existing.box.x <= 0 && existing.box.y <= 0 && existing.box.x + existing.box.w >= options.width && existing.box.y + existing.box.h >= options.height)
         this.panicActive = true;
     }
@@ -171,8 +165,6 @@ export class MaskManager {
         const duplicate = this.active.find((item) => used.has(item) && item.fingerprint === candidate.fingerprint && boxesOverlap(item.box, candidate.box));
         if (duplicate) {
           duplicate.box = union(duplicate.box, candidate.box);
-          duplicate.lastSeen = at;
-          duplicate.expiresAt = at + this.holdMs;
           continue;
         }
         let match: ActiveBox | undefined;
@@ -184,16 +176,19 @@ export class MaskManager {
         }
         if (match) {
           match.box = union(match.box, candidate.box);
-          match.lastSeen = at;
-          match.expiresAt = at + this.holdMs;
+          match.expiresAt = Number.POSITIVE_INFINITY;
           used.add(match);
         } else {
-          const item: ActiveBox = { fingerprint: candidate.fingerprint, box: { ...candidate.box }, lastSeen: at, expiresAt: at + this.holdMs, padded: false };
+          const item: ActiveBox = { fingerprint: candidate.fingerprint, box: { ...candidate.box }, expiresAt: Number.POSITIVE_INFINITY, padded: false };
           this.active.push(item);
           used.add(item);
         }
       }
-      await this.render(at);
+      // This frame is the first proof these are gone; the delayed output can still show them for holdMs.
+      for (const item of this.active) {
+        if (!used.has(item) && item.expiresAt === Number.POSITIVE_INFINITY) item.expiresAt = at + this.holdMs;
+      }
+      await this.render();
     });
   }
 
@@ -201,7 +196,7 @@ export class MaskManager {
     return this.enqueue(async () => {
       if (this.stopped) return;
       this.active.splice(0, this.active.length, ...this.active.filter((item) => item.expiresAt > at));
-      await this.render(at);
+      await this.render();
     });
   }
 
@@ -209,7 +204,7 @@ export class MaskManager {
     return this.enqueue(async () => {
       if (this.stopped) throw new Error("Mask manager has stopped");
       this.panicActive = true;
-      await this.render(this.now());
+      await this.render();
     });
   }
 
@@ -234,12 +229,11 @@ export class MaskManager {
         if (!existing) continue;
         if (!valid(existing.box)) throw new Error(`Cannot recover mask ${slot.id}: invalid transform`);
         slot.box = { ...existing.box };
-        slot.keepUntil = Math.max(slot.keepUntil, at + this.holdMs);
-        this.active.push({ fingerprint: `reconnect-${slot.id}-${at}`, box: { ...existing.box }, lastSeen: at, expiresAt: slot.keepUntil, padded: true });
+        this.active.push({ fingerprint: `reconnect-${slot.id}-${at}`, box: { ...existing.box }, expiresAt: at + this.holdMs, padded: true });
         if (existing.box.x <= 0 && existing.box.y <= 0 && existing.box.x + existing.box.w >= this.options.width && existing.box.y + existing.box.h >= this.options.height)
           this.panicActive = true;
       }
-      await this.render(at);
+      await this.render();
     });
   }
 
@@ -254,7 +248,8 @@ export class MaskManager {
         return;
       }
       const now = this.now();
-      const activeExpiry = Math.max(now, ...this.active.map((item) => item.expiresAt));
+      // Text still on screen at shutdown may already be in the delay buffer: hold it a full delay from now.
+      const activeExpiry = Math.max(now, ...this.active.map((item) => Math.min(item.expiresAt, now + this.holdMs)));
       const waitMs = Math.max(this.holdMs, activeExpiry - now);
       if (waitMs > 0) await this.wait(waitMs);
       await this.disableAll();
@@ -268,14 +263,11 @@ export class MaskManager {
     return result;
   }
 
-  private async render(at: number): Promise<void> {
-    const all = this.active.map((item) => ({ box: item.box, keepUntil: item.expiresAt, padded: item.padded }));
-    for (const slot of this.slots) {
-      if (slot.enabled && slot.box && slot.keepUntil > at) all.push({ box: slot.box, keepUntil: slot.keepUntil, padded: true });
-    }
-    const targets: PlannedBox[] = this.panicActive
-      ? [{ box: { x: 0, y: 0, w: this.options.width, h: this.options.height }, keepUntil: Number.POSITIVE_INFINITY }]
-      : planMaskBoxes(all, {
+  /** Active boxes are the source of truth: every one is inside a planned target, so any other enabled source can go. */
+  private async render(): Promise<void> {
+    const targets: Box[] = this.panicActive
+      ? [{ x: 0, y: 0, w: this.options.width, h: this.options.height }]
+      : planMaskBoxes(this.active, {
         width: this.options.width,
         height: this.options.height,
         paddingPx: this.options.paddingPx ?? 4,
@@ -284,39 +276,34 @@ export class MaskManager {
 
     // Reserve still-live sources for targets that contain them before assigning any free slot.
     const orderedTargets = [...targets].sort((a, b) => {
-      const containedSlots = (target: PlannedBox) => this.slots.filter((slot) => slot.enabled && slot.box && contains(target.box, slot.box)).length;
+      const containedSlots = (target: Box) => this.slots.filter((slot) => slot.enabled && slot.box && contains(target, slot.box)).length;
       return containedSlots(b) - containedSlots(a);
     });
     const claimed = new Set<Slot>();
-    const assignments: Array<{ slot: Slot; target: PlannedBox }> = [];
+    const assignments: Array<{ slot: Slot; target: Box }> = [];
     for (const target of orderedTargets) {
-      let slot = this.slots.find((candidate) => !claimed.has(candidate) && candidate.enabled && candidate.box && contains(target.box, candidate.box));
+      let slot = this.slots.find((candidate) => !claimed.has(candidate) && candidate.enabled && candidate.box && contains(target, candidate.box));
       slot ??= this.slots.find((candidate) => !claimed.has(candidate) && !candidate.enabled);
-      slot ??= this.slots.find((candidate) => !claimed.has(candidate) && candidate.enabled && candidate.keepUntil <= at);
+      slot ??= this.slots.find((candidate) => !claimed.has(candidate));
       if (!slot) throw new Error("Mask pool allocation failed; refusing to drop a detected mask");
       claimed.add(slot);
       assignments.push({ slot, target });
     }
+    // Move sources that are still showing an old box last, after every other target is already covering.
+    const movesOldBox = ({ slot, target }: { slot: Slot; target: Box }) => Number(slot.enabled && !contains(target, slot.box!));
+    assignments.sort((a, b) => movesOldBox(a) - movesOldBox(b));
 
     // Place and enable every target before disabling any old slot, so consolidation never uncovers a box.
     for (const { slot, target } of assignments) {
-      if (!slot.box || JSON.stringify(slot.box) !== JSON.stringify(target.box)) await this.options.backend.place(slot.id, target.box);
+      if (!slot.box || JSON.stringify(slot.box) !== JSON.stringify(target)) await this.options.backend.place(slot.id, target);
       if (!slot.enabled) await this.options.backend.enable(slot.id, true);
-      slot.box = { ...target.box };
+      slot.box = { ...target };
       slot.enabled = true;
-      slot.keepUntil = target.keepUntil;
     }
     for (const slot of this.slots) {
       if (slot.enabled && !claimed.has(slot)) {
-        const covered = assignments.some(({ target }) => contains(target.box, slot.box!));
-        if (covered || slot.keepUntil <= at) {
-          await this.options.backend.enable(slot.id, false);
-          slot.enabled = false;
-          slot.keepUntil = 0;
-        } else {
-          // Keep an old source visible if no replacement geometry proves it covered.
-          throw new Error(`Cannot safely reclaim enabled mask ${slot.id}; its box is not covered by the current mask plan`);
-        }
+        await this.options.backend.enable(slot.id, false);
+        slot.enabled = false;
       }
     }
   }
@@ -325,7 +312,6 @@ export class MaskManager {
     for (const slot of this.slots) {
       if (slot.enabled) await this.options.backend.enable(slot.id, false);
       slot.enabled = false;
-      slot.keepUntil = 0;
     }
   }
 }

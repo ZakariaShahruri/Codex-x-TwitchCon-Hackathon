@@ -42,7 +42,7 @@ test("capture loop never overlaps ticks while capture or OCR is busy", async () 
   await loop.stop();
 });
 
-test("identical PNG bytes skip OCR and emit the previous boxes for lastSeen refresh", async () => {
+test("identical PNG bytes skip OCR and emit the previous boxes so they stay on screen", async () => {
   let recognitionCalls = 0;
   const frames: CaptureFrame[] = [];
   const region = { x: 20, y: 30, w: 40, h: 50 };

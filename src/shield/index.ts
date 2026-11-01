@@ -87,11 +87,13 @@ export const start: StartTrack = async (bus, config) => {
       lastError = "";
     }
 
+    const seen = new Set<string>();
     for (const candidate of frame.leaks) {
       if (capture?.masks.isIgnored(candidate.fingerprint)) continue;
+      seen.add(candidate.fingerprint);
       let leak = activeLeaks.get(candidate.fingerprint);
       if (!leak) {
-        leak = { id: randomUUID(), expiresAt: frame.at + holdMs };
+        leak = { id: randomUUID(), expiresAt: Number.POSITIVE_INFINITY };
         activeLeaks.set(candidate.fingerprint, leak);
         totalBlocked += 1;
         bus.emit("leak.detected", {
@@ -109,11 +111,13 @@ export const start: StartTrack = async (bus, config) => {
         const safe = worstCaseMs < config.delayMs - config.safetyMarginMs;
         console.log(`Leak #${totalBlocked} ${candidate.kind}: capture-to-mask ${captureToMaskMs.toFixed(1)}ms / ${config.delayMs}ms delay; worst case incl. ${config.captureIntervalMs}ms capture interval ${worstCaseMs.toFixed(1)}ms / ${config.delayMs - config.safetyMarginMs}ms available (${safe ? "within budget" : "OVER BUDGET"}).`);
       } else {
-        leak.expiresAt = frame.at + holdMs;
+        leak.expiresAt = Number.POSITIVE_INFINITY;
       }
     }
 
+    // Same lifetime rule as the masks: the first frame without the leak starts its delay-buffer countdown.
     for (const [fingerprint, leak] of activeLeaks) {
+      if (!seen.has(fingerprint) && leak.expiresAt === Number.POSITIVE_INFINITY) leak.expiresAt = frame.at + holdMs;
       if (leak.expiresAt > frame.at) continue;
       bus.emit("leak.cleared", { id: leak.id, at: frame.at });
       activeLeaks.delete(fingerprint);
