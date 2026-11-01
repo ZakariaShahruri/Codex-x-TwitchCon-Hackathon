@@ -56,7 +56,7 @@ test("stdin length-prefixed frames produce one JSON line each", { skip: !support
     });
     assert.equal(result.status, 0, result.stderr.toString());
     const lines = result.stdout.toString("utf8").trim().split("\n");
-    assert.equal(lines.length, 2);
+    assert.equal(lines.length, 2, `expected one line per frame, got:\n${result.stdout.toString("utf8")}\nstderr:\n${result.stderr.toString("utf8")}`);
     const [validFrame, invalidFrame] = lines.map((line) => JSON.parse(line) as {
       ok: boolean; width: number; height: number; text: unknown[]; barcodes: unknown[]; error?: string;
     });

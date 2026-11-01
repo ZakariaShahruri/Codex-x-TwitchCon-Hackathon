@@ -113,12 +113,16 @@ private func protocolError(_ message: String) -> NSError {
     NSError(domain: "TwitchyOCRProtocol", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
 }
 
+/// Protocol output goes to a private copy of stdout; fd 1 is pointed at stderr so any
+/// framework logging can never be mistaken for a frame result.
+private let protocolOutput = FileHandle(fileDescriptor: dup(STDOUT_FILENO), closeOnDealloc: false)
+
 private func write(_ result: FrameResult) throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     var data = try encoder.encode(result)
     data.append(0x0a)
-    FileHandle.standardOutput.write(data)
+    protocolOutput.write(data)
 }
 
 private func emitError(_ error: Error) {
@@ -144,9 +148,12 @@ private func run(level: VNRequestTextRecognitionLevel) throws {
 private func selfTestBox() throws {
     let result = pixelBox(CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5), imageWidth: 200, imageHeight: 100)
     let data = try JSONEncoder().encode(result)
-    FileHandle.standardOutput.write(data)
-    FileHandle.standardOutput.write(Data([0x0a]))
+    protocolOutput.write(data)
+    protocolOutput.write(Data([0x0a]))
 }
+
+_ = protocolOutput
+dup2(STDERR_FILENO, STDOUT_FILENO)
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 if arguments == ["--self-test-box"] {
