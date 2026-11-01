@@ -64,7 +64,56 @@ test("sensitive regions preserve valid canvas boxes and reject invalid boxes", (
   assert.match(candidate.fingerprint, /^[a-f0-9]{64}$/u);
 });
 
-test("detectors avoid prose, code references, UUIDs, hashes and versions", () => {
+test("connection-string passwords and Bearer tokens mask only the secret", () => {
+  const url = line("DATABASE_URL=postgres://demo: FakePassword123@localhost:5432/app", ["DATABASE_URL=postgres://demo:", "FakePassword123@localhost:5432/app"]);
+  const [password] = detectPasswords([url]);
+  assert.ok(password);
+  assertOnlyMatchedWord(password, url.words[1]!);
+
+  const header = line("Authorization: Bearer AbCdEfGhIjKlMnOpQrStUvWxYz0123456789xyz");
+  const [token] = detectApiKeys([header]);
+  assert.ok(token);
+  assertOnlyMatchedWord(token, header.words[2]!);
+});
+
+test("detectors catch common real-world secrets", () => {
+  const secrets = [
+    "DATABASE_URL=postgres://demo:FakePassword123@localhost:5432/app",
+    "mysql://root:s3cr3t@db.internal/app",
+    '"password": "hunter2-Secret"',
+    "password = 'hunter2'",
+    "Password: hunter2",
+    'password := "hunter2"',
+    'user.password = "hunter2"',
+    'clientSecret = "a8Fk2mQ9zX"',
+    "DB_PASSWORD=hunter2",
+    "PASSWORD=my.secret",
+    "SMTP_PASSWORD=Tr0ub4dor&3",
+    "password: correct horse battery staple",
+    "export OPENAI_API_KEY=sk-proj-AbCdEfGhIjKlMnOpQrStUvWx",
+    'const apiKey = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWx"',
+    '"api_key": "Zx8Qm2Lp9Tr4Vw7Ks1Jd6Hf3Ng5Yb0Ca"',
+    "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWx",
+    "AIzaSyA1b2C3d4E5f6G7h8I9j0KlMnOpQrStUvW",
+    // Stripe-shaped fakes are assembled at runtime so GitHub push protection doesn't flag them.
+    `${"sk_"}live_51HxYzAbCdEfGhIjKlMnOpQrSt`,
+    `STRIPE_SECRET_KEY=${"sk_"}test_AbCdEfGhIjKlMnOpQrSt`,
+    "glpat-AbCdEfGhIjKlMnOpQrSt",
+    "hf_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    "npm_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+    "ghs_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+    "gho_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+    "xoxa-AbCdEfGhIjKlMnOpQrStUv",
+    "TWITCH_BOT_TOKEN=oauth: fake-twitch-token-abcdef0123456789",
+    "contact: john.doe@gmail.com",
+  ];
+  for (const text of secrets) {
+    const lines = [line(text)];
+    assert.notEqual([...detectApiKeys(lines), ...detectEmails(lines), ...detectPasswords(lines)].length, 0, text);
+  }
+});
+
+test("detectors avoid prose, code references, versions and placeholders", () => {
   const nearMisses = [
     "const response = await client.get('/health')",
     "The API key is stored safely in the environment",
@@ -74,8 +123,32 @@ test("detectors avoid prose, code references, UUIDs, hashes and versions", () =>
     "OPENAI_API_KEY: sk-test",
     "PASSWORD: process.env.PASSWORD",
     "PASSWORD: Please keep this value private",
-  ].map((text) => line(text));
-  assert.deepEqual(detectApiKeys(nearMisses), []);
-  assert.deepEqual(detectEmails(nearMisses), []);
-  assert.deepEqual(detectPasswords(nearMisses), []);
+    "added react@18.3.1 and obs-websocket-js@5.0.6",
+    "npm install @types/node@22.10.1",
+    "img src=logo@2x.png",
+    "git clone git@github.com:twitchy/shield.git",
+    "password: ********",
+    "password: <hidden>",
+    "password: string",
+    "SECRET: string;",
+    "isPassword: true",
+    "const password = req.body.password;",
+    "this.password = password;",
+    "password: hashedPassword,",
+    "if (password == null) return;",
+    "if (password != confirm)",
+    "(password) => hash(password)",
+    'password = os.getenv("DB_PASSWORD")',
+    "password = input()",
+    "password: process.env.DB_PASSWORD ?? ''",
+    "password: ${{ secrets.DB_PASSWORD }}",
+    "DB_PASSWORD=${DB_PASSWORD}",
+    "postgres://user:${DB_PASS}@localhost/app",
+    "TOKEN_URL=https://id.twitch.tv/oauth2/token",
+    "TOKEN_EXPIRES_AT=1730419200000000000000",
+  ];
+  for (const text of nearMisses) {
+    const lines = [line(text)];
+    assert.deepEqual([...detectApiKeys(lines), ...detectEmails(lines), ...detectPasswords(lines)], [], text);
+  }
 });

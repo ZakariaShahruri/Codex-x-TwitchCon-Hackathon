@@ -20,6 +20,11 @@ export function compactText(text: string): CompactText {
   return { text: chars.join(""), sourceOffsets };
 }
 
+/** `clientSecret`, `client-secret` and `CLIENT_SECRET` all become `CLIENT_SECRET`. */
+export function normalizeLabel(label: string): string {
+  return label.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/-/g, "_").toUpperCase();
+}
+
 export function originalRangeToCompact(text: string, start: number, end: number): TextRange | undefined {
   let compactStart = 0;
   let compactEnd = 0;

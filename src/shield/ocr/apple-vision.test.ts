@@ -60,7 +60,7 @@ for (const name of engineFixtures) {
     }
     assert.equal(frames.length, 1);
     const leaks = frames[0]!.leaks;
-    assert.deepEqual(leaks.map((leak) => leak.kind).sort(), ["api_key", "api_key", "api_key", "email"]);
+    assert.deepEqual(leaks.map((leak) => leak.kind).sort(), ["api_key", "api_key", "api_key", "email", "password"]);
     assert.ok(leaks.every(({ box }) => box.w > 0 && box.h > 0 && box.x >= 0 && box.y >= 0 && box.x + box.w <= 1920 && box.y + box.h <= 1080));
   });
 }
