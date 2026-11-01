@@ -23,4 +23,4 @@ twitch configure
 twitch token --user-token --scopes "user:read:chat user:write:chat user:bot"
 ```
 
-Copy the returned access token to `TWITCH_BOT_TOKEN` in `.env`, and set `TWITCH_BOT_USER_ID`, `TWITCH_BROADCASTER_ID`, and `TWITCH_CLIENT_ID`. Never commit the token or app secret. If the bot account is not the broadcaster, make it a moderator in the channel or have the broadcaster grant the app `channel:bot` authorization.
+Copy the returned access token to `TWITCH_BOT_TOKEN` and the refresh token to `TWITCH_BOT_REFRESH_TOKEN` in `.env`, and the app's client secret to `TWITCH_CLIENT_SECRET` (access tokens expire after about 4 hours; these two let the bot renew its own token), and set `TWITCH_BOT_USER_ID`, `TWITCH_BROADCASTER_ID`, and `TWITCH_CLIENT_ID`. Never commit the token or app secret. If the bot account is not the broadcaster, make it a moderator in the channel or have the broadcaster grant the app `channel:bot` authorization.

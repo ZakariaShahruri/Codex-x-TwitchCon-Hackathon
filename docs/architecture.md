@@ -152,7 +152,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
   - `stream.offline` v1 → end-of-stream report
 - Handle `session_keepalive`, `session_reconnect` and revocations. The example chatbot guide doesn't, and a dropped socket mid-demo kills the commands.
 - **Chat:** `POST https://api.twitch.tv/helix/chat/messages`. Batch leak announcements (at most one message every few seconds). Commands: mod-only `!shield on/off`, `!panic`, `!unblur`; everyone: `!twitchy` (stats) and cheering after a save (Twitchy reacts on the overlay).
-- **Auth:** user access token for the bot account with `user:read:chat`, `user:write:chat`, `user:bot`. Configure the Twitch CLI, then run `twitch token --user-token --scopes "user:read:chat user:write:chat user:bot"`; put the result in `TWITCH_BOT_TOKEN` in `.env`. If the bot isn't the broadcaster, the broadcaster grants `channel:bot` or mods the bot. See README for setup details.
+- **Auth:** user access token for the bot account with `user:read:chat`, `user:write:chat`, `user:bot`. Configure the Twitch CLI, then run `twitch token --user-token --scopes "user:read:chat user:write:chat user:bot"`; put the access token in `TWITCH_BOT_TOKEN` and the refresh token in `TWITCH_BOT_REFRESH_TOKEN`. Access tokens expire after about 4 hours; with `TWITCH_CLIENT_SECRET` and the refresh token set, Track B renews the token itself, otherwise it logs how to get a new one. If the bot isn't the broadcaster, the broadcaster grants `channel:bot` or mods the bot. See README for setup details.
 - **Web server** (`src/web/`): `npm run dev` serves `web/overlay/` at `http://127.0.0.1:<webPort>/overlay/` and `web/dashboard/` at `http://127.0.0.1:<webPort>/dashboard/` when that page exists. The WebSocket bridge listens on localhost and forwards only `browserEvents`; the overlay receives leak events and shield state, while the dashboard receives all browser events. On connect/reconnect it sends one `{ snapshot: { shieldState, leakCount, privateState } }` message (`privateState` for the dashboard only) instead of replaying events, so a reloaded page shows the current state without re-animating old leaks. `npm run demo:events` starts only this track and runs a scripted event loop for previewing the overlay without Track A.
 - **Overlay** (`web/overlay/`): plain HTML/CSS/JS, sprite sheets in `web/overlay/assets/`. Canvas = OBS canvas size, so `box` coordinates are used as-is.
   - Twitchy sleeps when `off`, guards with a gentle idle animation when `armed`, looks worried when `degraded`, and raises an alarm when `panic`.
@@ -175,7 +175,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 
 ## 8. Configuration
 
-- `.env` (never committed; `.env.example` kept current): `TWITCH_CLIENT_ID`, `TWITCH_BOT_TOKEN`, `TWITCH_BOT_USER_ID`, `TWITCH_BROADCASTER_ID`, `OBS_WS_URL`, `OBS_WS_PASSWORD`, `OPENAI_API_KEY`
+- `.env` (never committed; `.env.example` kept current): `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` (optional), `TWITCH_BOT_TOKEN`, `TWITCH_BOT_REFRESH_TOKEN` (optional), `TWITCH_BOT_USER_ID`, `TWITCH_BROADCASTER_ID`, `OBS_WS_URL`, `OBS_WS_PASSWORD`, `OPENAI_API_KEY`
 - `twitchy.config.json` (committed defaults): `delayMs`, `captureIntervalMs`, `safetyMarginMs`, `maskPoolSize`, `enabledDetectors`, `sensitiveRegions`, `armOnStart`, `webPort`, `rulesModel`. Validated at startup with a message naming the bad key; `delayMs` must exceed `captureIntervalMs + safetyMarginMs` and be at most 2000 (§2).
 - `twitchy.private.json` (gitignored): watchlist and compiled rules
 

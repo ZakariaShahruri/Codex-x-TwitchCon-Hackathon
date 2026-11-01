@@ -2,6 +2,11 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-02 · Two optional Twitch env values (Salina → Zakaria)
+
+- `src/shared/config.ts` now also loads `TWITCH_CLIENT_SECRET` and `TWITCH_BOT_REFRESH_TOKEN` into `config.env`, so Track B can renew the bot's Twitch token (it expires after ~4 h, which would silence the bot mid-demo).
+- Both are optional and only used by Track B. No event or behavior change for Track A; nothing to do.
+
 ## 2026-11-02 · Track A detector audit (Zakaria → Salina)
 
 - No event payloads changed. Tier 1 now catches provider tokens shown in ordinary terminal prose (for example, npm's `Invalid token …`) and password properties nested inside TypeScript/JSON object lines.

@@ -13,14 +13,14 @@ export interface Config {
   webPort: number;
   rulesModel: string;
   env: {
-    TWITCH_CLIENT_ID?: string; TWITCH_BOT_TOKEN?: string; TWITCH_BOT_USER_ID?: string;
-    TWITCH_BROADCASTER_ID?: string; OBS_WS_URL?: string; OBS_WS_PASSWORD?: string;
+    TWITCH_CLIENT_ID?: string; TWITCH_CLIENT_SECRET?: string; TWITCH_BOT_TOKEN?: string;
+    TWITCH_BOT_REFRESH_TOKEN?: string; TWITCH_BOT_USER_ID?: string; TWITCH_BROADCASTER_ID?: string; OBS_WS_URL?: string; OBS_WS_PASSWORD?: string;
     OPENAI_API_KEY?: string;
   };
 }
 
 const detectorKinds: LeakKind[] = ["api_key", "email", "password", "phone", "card", "ip", "seed_phrase", "qr_code", "watchlist", "custom_rule", "sensitive_region"];
-const envKeys = ["TWITCH_CLIENT_ID", "TWITCH_BOT_TOKEN", "TWITCH_BOT_USER_ID", "TWITCH_BROADCASTER_ID", "OBS_WS_URL", "OBS_WS_PASSWORD", "OPENAI_API_KEY"] as const;
+const envKeys = ["TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET", "TWITCH_BOT_TOKEN", "TWITCH_BOT_REFRESH_TOKEN", "TWITCH_BOT_USER_ID", "TWITCH_BROADCASTER_ID", "OBS_WS_URL", "OBS_WS_PASSWORD", "OPENAI_API_KEY"] as const;
 type Raw = Omit<Config, "env">;
 
 /** OBS caps one Render Delay filter at 500 ms; obs:setup stacks ceil(delayMs / 500) filters. Above 2 s the frame buffers cost too much GPU memory. */

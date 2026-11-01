@@ -30,6 +30,24 @@ test("reads secrets from the .env file", async () => {
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test("loads the optional Twitch token-renewal values", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "twitchy-env-"));
+  const saved = { secret: process.env.TWITCH_CLIENT_SECRET, refresh: process.env.TWITCH_BOT_REFRESH_TOKEN };
+  delete process.env.TWITCH_CLIENT_SECRET;
+  delete process.env.TWITCH_BOT_REFRESH_TOKEN;
+  try {
+    const envPath = join(dir, ".env");
+    await writeFile(envPath, "TWITCH_CLIENT_SECRET=app-secret\nTWITCH_BOT_REFRESH_TOKEN=refresh-value\n");
+    const config = await loadConfig({ envPath });
+    assert.equal(config.env.TWITCH_CLIENT_SECRET, "app-secret");
+    assert.equal(config.env.TWITCH_BOT_REFRESH_TOKEN, "refresh-value");
+  } finally {
+    if (saved.secret !== undefined) process.env.TWITCH_CLIENT_SECRET = saved.secret;
+    if (saved.refresh !== undefined) process.env.TWITCH_BOT_REFRESH_TOKEN = saved.refresh;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("rejects invalid values with a readable key-specific message", async () => {
   const dir = await mkdtemp(join(tmpdir(), "twitchy-config-"));
   try {
