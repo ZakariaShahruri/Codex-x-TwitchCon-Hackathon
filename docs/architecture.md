@@ -199,7 +199,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 - The screenshot component target (<50 ms p95) failed in this rerun at 181.8 ms; the total estimated frame subtotal remains inside the §1 available budget. The earlier 2026-11-01 idle-OBS sample was 43.5 ms p95, so screenshot latency varied substantially between runs.
 - `fast` missed `FAKE_AWS_SECRET_0123456789abcdef` in every sample, so it is not safe for detection. Accurate recognition read all four benchmark values in all 30 samples.
 - **Vision inserts spaces after colons**: `oauth:fake-twitch-token…` reads as `oauth: fake-twitch-token…` and `postgres://demo:FakePassword123@…` as `postgres://demo: FakePassword123@…`. Word boxes split on whitespace, so a secret can span several words. Detectors must match on the line text with this kind of whitespace tolerated, then mask the union of the words the match covers.
-- Still open: #1 (stopwatch check of the stacked delay). The benchmark numbers are from idle OBS; engine timing logs measure the real path under load.
+- **Go/no-go #1 and #3 pass** (2026-11-01, manual): the stopwatch showed the two stacked filters give the 1 s delay, and a typed email was masked in `Twitchy Broadcast` before its delayed frame aired. The benchmark numbers are from idle OBS; engine timing logs measure the real path under load.
 
 ### Live OBS fixture run (2026-11-02)
 

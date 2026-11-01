@@ -2,6 +2,12 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-02 · One leak stays one leak (Zakaria → Salina)
+
+- **Moving a secret no longer re-announces it.** OCR reads the same key slightly differently as it moves (`-` as `=`), which used to send a new `leak.detected`, bump `totalBlocked` and make Twitchy jump again. Now one secret is one leak for its whole time on screen. Different secrets still count separately, so the Leak Gauntlet counts stay right.
+- **`leak.cleared` arrives one frame later** (~150–300 ms): a leak now has to be missing from two frames in a row before its countdown starts, because one empty frame can be an OCR miss.
+- No event shapes changed; nothing to do.
+
 ## 2026-11-02 · Two optional Twitch env values (Salina → Zakaria)
 
 - `src/shared/config.ts` now also loads `TWITCH_CLIENT_SECRET` and `TWITCH_BOT_REFRESH_TOKEN` into `config.env`, so Track B can renew the bot's Twitch token (it expires after ~4 h, which would silence the bot mid-demo).
