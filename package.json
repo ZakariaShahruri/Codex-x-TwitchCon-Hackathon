@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
+    "dev:commands": "TWITCHY_DEV_COMMANDS=1 tsx src/index.ts",
     "demo:events": "tsx src/web/demo-events.ts",
     "obs:setup": "tsx scripts/obs-setup.ts",
     "ocr:build": "node scripts/build-ocr-vision.mjs",

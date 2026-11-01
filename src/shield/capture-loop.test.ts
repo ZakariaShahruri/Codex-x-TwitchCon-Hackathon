@@ -67,3 +67,25 @@ test("identical PNG bytes skip OCR and emit the previous boxes for lastSeen refr
   assert.deepEqual(frames[1]!.leaks, frames[0]!.leaks);
   await loop.stop();
 });
+
+test("disarmed capture keeps the loop alive but skips OCR and detection", async () => {
+  let recognitionCalls = 0;
+  let emitted = 0;
+  let armed = false;
+  const loop = new CaptureLoop({
+    capture: async () => Buffer.from("frame while off"),
+    ocr: { recognize: async () => { recognitionCalls += 1; return []; } },
+    intervalMs: 100,
+    enabledDetectors: detectorKinds,
+    sensitiveRegions: noRegions,
+    isArmed: () => armed,
+    onFrame: (frame) => { emitted += 1; assert.deepEqual(frame.leaks, []); },
+  });
+  await loop.tick();
+  assert.equal(recognitionCalls, 0);
+  assert.equal(emitted, 1);
+  armed = true;
+  await loop.tick();
+  assert.equal(recognitionCalls, 1, "arming forces OCR even when the frame bytes have not changed");
+  await loop.stop();
+});

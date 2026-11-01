@@ -158,6 +158,7 @@ export class MaskManager {
 
   get panic(): boolean { return this.panicActive; }
   get activeBoxes(): readonly Readonly<ActiveBox>[] { return this.active; }
+  isIgnored(fingerprint: string): boolean { return this.ignored.has(fingerprint); }
 
   update(candidates: readonly LeakCandidate[], at = this.now()): Promise<void> {
     return this.enqueue(async () => {
@@ -219,6 +220,26 @@ export class MaskManager {
       this.active.length = 0;
       this.panicActive = false;
       await this.disableAll();
+    });
+  }
+
+  /** Reconcile source IDs and enabled geometry after an OBS websocket reconnect. */
+  resync(existingMasks: readonly ExistingMask[]): Promise<void> {
+    return this.enqueue(async () => {
+      const byId = new Map(existingMasks.map((item) => [item.id, item]));
+      const at = this.now();
+      for (const slot of this.slots) {
+        const existing = byId.get(slot.id);
+        slot.enabled = existing !== undefined;
+        if (!existing) continue;
+        if (!valid(existing.box)) throw new Error(`Cannot recover mask ${slot.id}: invalid transform`);
+        slot.box = { ...existing.box };
+        slot.keepUntil = Math.max(slot.keepUntil, at + this.holdMs);
+        this.active.push({ fingerprint: `reconnect-${slot.id}-${at}`, box: { ...existing.box }, lastSeen: at, expiresAt: slot.keepUntil, padded: true });
+        if (existing.box.x <= 0 && existing.box.y <= 0 && existing.box.x + existing.box.w >= this.options.width && existing.box.y + existing.box.h >= this.options.height)
+          this.panicActive = true;
+      }
+      await this.render(at);
     });
   }
 

@@ -54,6 +54,8 @@ Scene "Twitchy Broadcast"   ← what goes to Twitch (top of list = drawn on top)
 - **Lifetime rule (critical):** each detected box lives until `lastSeen + delayMs + safetyMarginMs`. The delayed output still shows the secret after it disappears from the live picture, so the mask must outlast it. Active masks = all unexpired boxes; when text moves, the old position remains covered as the candidate box expands to include the new position.
 - **Pool exhaustion:** pad boxes, merge overlaps, then merge nearest boxes into larger covering boxes until the plan fits the pool. Never discard a live box. A one-way SHA-256 fingerprint stays in process memory to suppress the same text after `unblur`; plaintext matches are not retained in events, files or logs.
 - **Stop/restart:** graceful stop holds enabled masks for at least `delayMs + safetyMarginMs` before clearing them. On startup, enabled pool sources are adopted and held for that same interval. A full-canvas panic mask remains enabled across stop and restart until `unblur`.
+- **Track lifecycle:** `armOnStart` sets the initial armed state; `on`/`off` gate OCR and detection while existing masks expire normally. `panic` and `unblur` act on the mask manager even while capture is degraded. OBS connection failures retry with exponential backoff; a failed OCR helper is restarted and reported degraded until a frame succeeds.
+- **Events and timing:** a redacted `leak.detected` is emitted only after its box is on the OBS mask pool; `totalBlocked` counts newly active distinct fingerprints. `leak.cleared` follows mask expiry or a successful unblur. `engine.metrics` is emitted every second. Debug timing is enabled with `DEBUG=1`.
 - **Unchanged frames:** if the PNG's SHA-256 fingerprint is identical to the previous capture, skip OCR and return the prior boxes so the engine can refresh `lastSeen`.
 
 ---
@@ -166,7 +168,8 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 - **Tests:** `node:test`. Detectors, watchlist matching and mask lifetime logic must have unit tests; the engine has a fixture test (screenshot of a fake `.env` → expected boxes); the Leak Gauntlet is the end-to-end test.
 - **Errors:** handle at the boundaries (obs-websocket, OCR helper, OpenAI, Twitch API, EventSub) with log lines that say what failed and what happens next.
 - **CI** (`.github/workflows/ci.yml`): every push to `main` and every PR runs `npm ci`, `npm run typecheck` and `npm test` on Ubuntu, plus a `macos-latest` job that builds the Apple Vision helper and runs the OCR tests. It must stay green.
-- **Logging:** per-frame timing line in debug mode: `capture 34ms · ocr 141ms · detect 2ms · mask 6ms · total 183ms`.
+- **Logging:** `DEBUG=1` prints per-frame timing: `capture 34ms · ocr 141ms · detect 2ms · mask 6ms · total 183ms`, plus one-second metrics. Each newly masked leak prints capture-to-mask latency against `delayMs` and the worst case including `captureIntervalMs` against `delayMs - safetyMarginMs`.
+- **Local commands:** `npm run dev:commands` starts the app with an stdin command prompt for `on`, `off`, `panic`, `unblur`, and `quit`; no Twitch connection is required.
 
 ## 8. Configuration
 
@@ -178,7 +181,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 
 1. **Render Delay stacking:** the 500 ms cap per filter is confirmed in OBS source. Confirm in OBS that two stacked filters on `Twitchy Raw` give ~1 s (film a stopwatch next to the preview). If not, set `delayMs` to 500 and fit the whole budget in §1 into it.
 2. **OCR latency:** the chosen Apple Vision text + barcode pass on a 1080p `.env` editor frame must stay under 200 ms p95 and reliably read the fake credentials.
-3. **End to end:** type an email into a text editor in `Twitchy Content` → the mask is on screen in `Twitchy Broadcast` before the delayed frame shows the email. Record it; this clip is the core of the demo.
+3. **End to end (manual):** put OBS credentials in `.env`, ensure `npm run obs:setup` has created the layout, then run `DEBUG=1 npm run dev:commands`. Confirm `Shield state: armed`, select `Twitchy Broadcast` as the program scene, and type a fake address such as `demo@example.invalid` into a large editor window visible in `Twitchy Content`. The opaque mask should appear over the address in `Twitchy Broadcast` immediately, before the delayed content reaches it. Logs should show per-frame `capture · ocr · detect · mask · total` timings, `Leak #1 email: capture-to-mask … / 1000ms delay; worst case incl. 150ms capture interval … / 900ms available (within budget)`, and one-second `engine.metrics` in debug mode. Record the OBS preview/program and stopwatch for the demo evidence.
 
 ### Benchmark with live OBS (2026-11-01)
 
@@ -194,7 +197,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 - These OCR measurements predate the helper's 1280-pixel thumbnail path for larger input frames; rerun `npm run bench:ocr` to refresh latency and read-rate figures for the current path.
 - `fast` missed `FAKE_AWS_SECRET_0123456789abcdef` in every sample, so it is not safe for detection.
 - **Vision inserts spaces after colons**: `oauth:fake-twitch-token…` reads as `oauth: fake-twitch-token…` and `postgres://demo:FakePassword123@…` as `postgres://demo: FakePassword123@…`. Word boxes split on whitespace, so a secret can span several words. Detectors must match on the line text with this kind of whitespace tolerated, then mask the union of the words the match covers.
-- Still open: #1 (stopwatch check of the stacked delay) and #3 (end to end, after the engine is built). These numbers are an idle OBS; the engine's per-frame timing log measures the real path under load.
+- Still open: #1 (stopwatch check of the stacked delay) and the manual #3 run above. The benchmark numbers are from idle OBS; engine timing logs measure the real path under load.
 
 ## 10. Out of scope
 

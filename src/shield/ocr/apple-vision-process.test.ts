@@ -31,9 +31,11 @@ process.stdin.on('data', (chunk) => {
   }
 });
 `);
-  const ocr = new AppleVisionOCR({ executablePath: helper.executable, timeoutMs: 2_000 });
+  let restarts = 0;
+  const ocr = new AppleVisionOCR({ executablePath: helper.executable, timeoutMs: 2_000, onRestart: () => { restarts += 1; } });
   try {
     assert.deepEqual(await ocr.recognize(new Uint8Array([1, 2, 3])), []);
+    assert.equal(restarts, 1);
   } finally {
     await ocr.close();
     await rm(helper.directory, { recursive: true, force: true });

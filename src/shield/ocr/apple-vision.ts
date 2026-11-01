@@ -35,6 +35,7 @@ export interface AppleVisionOCROptions {
   executablePath?: string;
   level?: "fast" | "accurate";
   timeoutMs?: number;
+  onRestart?: () => void;
 }
 
 class HelperExitedError extends Error {}
@@ -44,6 +45,7 @@ export class AppleVisionOCR implements OCRService {
   private readonly executablePath: string;
   private readonly level: "fast" | "accurate";
   private readonly timeoutMs: number;
+  private readonly onRestart?: () => void;
   private readonly analyses = new WeakMap<Uint8Array, Promise<FrameResult>>();
   private processState: ProcessState | undefined;
   private closed = false;
@@ -52,6 +54,7 @@ export class AppleVisionOCR implements OCRService {
     this.executablePath = options.executablePath ?? `${process.cwd()}/tools/ocr-vision/.build/twitchy-ocr`;
     this.level = options.level ?? "accurate";
     this.timeoutMs = options.timeoutMs ?? 500;
+    this.onRestart = options.onRestart;
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1) throw new Error("OCR timeoutMs must be a positive integer");
   }
 
@@ -92,7 +95,10 @@ export class AppleVisionOCR implements OCRService {
     try {
       return await this.submit(png);
     } catch (error) {
-      if (error instanceof HelperExitedError && !this.closed) return this.submit(png);
+      if (error instanceof HelperExitedError && !this.closed) {
+        this.onRestart?.();
+        return this.submit(png);
+      }
       throw error;
     }
   }
