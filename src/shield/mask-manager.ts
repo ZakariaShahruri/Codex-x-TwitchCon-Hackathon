@@ -57,8 +57,6 @@ function contains(outer: Box, inner: Box): boolean {
   return outer.x <= inner.x && outer.y <= inner.y && outer.x + outer.w >= inner.x + inner.w && outer.y + outer.h >= inner.y + inner.h;
 }
 
-function boxesOverlap(a: Box, b: Box): boolean { return intersects(a, b); }
-
 function valid(box: Box): boolean {
   return [box.x, box.y, box.w, box.h].every(Number.isFinite) && box.w > 0 && box.h > 0;
 }
@@ -162,7 +160,7 @@ export class MaskManager {
       for (const candidate of candidates) {
         if (!valid(candidate.box) || this.ignored.has(candidate.fingerprint)) continue;
         this.seen.add(candidate.fingerprint);
-        const duplicate = this.active.find((item) => used.has(item) && item.fingerprint === candidate.fingerprint && boxesOverlap(item.box, candidate.box));
+        const duplicate = this.active.find((item) => used.has(item) && item.fingerprint === candidate.fingerprint && intersects(item.box, candidate.box));
         if (duplicate) {
           duplicate.box = union(duplicate.box, candidate.box);
           continue;
@@ -170,12 +168,15 @@ export class MaskManager {
         let match: ActiveBox | undefined;
         let bestArea = Number.POSITIVE_INFINITY;
         for (const item of this.active) {
-          if (used.has(item) || item.fingerprint !== candidate.fingerprint || !boxesOverlap(item.box, candidate.box)) continue;
+          if (used.has(item) || item.fingerprint !== candidate.fingerprint || !intersects(item.box, candidate.box)) continue;
           const candidateArea = area(union(item.box, candidate.box));
           if (candidateArea < bestArea) { match = item; bestArea = candidateArea; }
         }
         if (match) {
-          match.box = union(match.box, candidate.box);
+          // Moved text: the old position left the screen as of this frame, so it keeps its own countdown
+          // instead of growing one box along the whole path.
+          if (!contains(candidate.box, match.box)) this.active.push({ ...match, box: { ...match.box }, expiresAt: at + this.holdMs });
+          match.box = { ...candidate.box };
           match.expiresAt = Number.POSITIVE_INFINITY;
           used.add(match);
         } else {

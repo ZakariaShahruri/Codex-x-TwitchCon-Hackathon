@@ -59,6 +59,28 @@ test("a capture gap keeps the mask until a later frame proves the text is gone",
   assert.equal(backend.enabled.has("m1"), false);
 });
 
+test("scrolling text keeps only its recent trail covered instead of one ever-growing box", async () => {
+  const backend = new FakeMasks();
+  const masks = manager(backend, { maskIds: ["m1", "m2", "m3"], width: 1920, height: 1080 });
+  const frameMs = 150;
+  const position = (frame: number): Box => ({ x: 200, y: 900 - frame * 20, w: 600, h: 30 });
+  const covered = (box: Box) => [...backend.enabled].some((id) => {
+    const mask = backend.boxes.get(id)!;
+    return mask.x <= box.x && mask.y <= box.y && mask.x + mask.w >= box.x + box.w && mask.y + mask.h >= box.y + box.h;
+  });
+  for (let frame = 0; frame < 40; frame += 1) {
+    const at = frame * frameMs;
+    await masks.update([leak("scrolling-key", position(frame))], at);
+    // Position p left the screen at the next frame, so the delayed output can show it until then + 1100 ms.
+    for (let previous = 0; previous <= frame; previous += 1) {
+      const goneAt = previous === frame ? Number.POSITIVE_INFINITY : (previous + 1) * frameMs;
+      if (goneAt + 1_100 > at) assert.ok(covered(position(previous)), `frame ${frame}: position ${previous} uncovered`);
+    }
+  }
+  const tallest = Math.max(...[...backend.enabled].map((id) => backend.boxes.get(id)!.h));
+  assert.ok(tallest <= 220, `30px key scrolled for 6 s should not leave a ${tallest}px mask`);
+});
+
 test("pads and merges overlapping boxes", () => {
   assert.deepEqual(planMaskBoxes([
     { box: { x: 20, y: 30, w: 40, h: 20 } },
