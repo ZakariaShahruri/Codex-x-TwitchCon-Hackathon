@@ -72,12 +72,24 @@ private func recognize(_ png: Data, level: VNRequestTextRecognitionLevel) throws
     }
     let width = image.width
     let height = image.height
+    var visionData = png
+    if max(width, height) > 1280,
+       let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+           kCGImageSourceCreateThumbnailFromImageAlways: true,
+           kCGImageSourceThumbnailMaxPixelSize: 1280,
+       ] as CFDictionary) {
+        let thumbnailData = NSMutableData()
+        if let destination = CGImageDestinationCreateWithData(thumbnailData, "public.png" as CFString, 1, nil) {
+            CGImageDestinationAddImage(destination, thumbnail, nil)
+            if CGImageDestinationFinalize(destination) { visionData = thumbnailData as Data }
+        }
+    }
     let textRequest = VNRecognizeTextRequest()
     textRequest.recognitionLevel = level
     textRequest.usesLanguageCorrection = false
 
     let barcodeRequest = VNDetectBarcodesRequest()
-    let handler = VNImageRequestHandler(cgImage: image, options: [:])
+    let handler = VNImageRequestHandler(data: visionData, options: [:])
     try handler.perform([textRequest, barcodeRequest])
 
     let lines = (textRequest.results ?? []).compactMap { observation -> TextResult? in

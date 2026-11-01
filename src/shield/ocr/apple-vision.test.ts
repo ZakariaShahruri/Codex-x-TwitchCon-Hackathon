@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { AppleVisionOCR } from "./apple-vision.js";
+import type { LeakKind } from "../../shared/events.js";
+import { CaptureLoop } from "../capture-loop.js";
 
 const fixturePath = new URL("../../../tools/ocr-vision/fixtures/screen.png", import.meta.url);
 const executablePath = `${process.cwd()}/tools/ocr-vision/.build/twitchy-ocr`;
@@ -30,4 +32,32 @@ test("Apple Vision finds fixture words with boxes in the expected canvas regions
   } finally {
     await ocr.close();
   }
+});
+
+const engineFixture = new URL("../../../tools/ocr-vision/fixtures/fake-env-1080p.png", import.meta.url);
+const engineSupported = process.platform === "darwin" && existsSync(executablePath) && existsSync(engineFixture);
+
+test("accurate engine OCR detects the benchmark fixture leak boxes", { skip: !engineSupported }, async () => {
+  const png = readFileSync(engineFixture);
+  const ocr = new AppleVisionOCR({ level: "accurate", timeoutMs: 10_000 });
+  const frames: Array<{ leaks: Array<{ kind: LeakKind; box: { x: number; y: number; w: number; h: number } }> }> = [];
+  const loop = new CaptureLoop({
+    capture: async () => png,
+    ocr,
+    intervalMs: 150,
+    enabledDetectors: ["api_key", "email", "password", "sensitive_region"],
+    sensitiveRegions: [],
+    onFrame: (frame) => frames.push(frame),
+  });
+  try {
+    await loop.tick();
+  } finally {
+    await loop.stop();
+    await ocr.close();
+  }
+  assert.equal(frames.length, 1);
+  const leaks = frames[0]!.leaks;
+  assert.deepEqual(leaks.map((leak) => leak.kind).sort(), ["api_key", "api_key", "api_key", "email"]);
+  assert.ok(leaks.every(({ box }) => box.w > 0 && box.h > 0 && box.x >= 0 && box.y >= 0 && box.x + box.w <= 1920 && box.y + box.h <= 1080));
+  assert.ok(leaks.some(({ kind, box }) => kind === "email" && box.y > 700));
 });
