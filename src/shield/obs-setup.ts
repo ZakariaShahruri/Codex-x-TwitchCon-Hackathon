@@ -31,6 +31,11 @@ export function renderDelayParts(delayMs: number): number[] {
   return parts;
 }
 
+/** Twitchy-owned Broadcast sources from bottom (OBS index 0) to top: delayed content, masks over it, overlay on top. */
+export function broadcastOrder(maskCount: number): string[] {
+  return [SCENES.raw, ...Array.from({ length: maskCount }, (_, i) => `${MASK_PREFIX}${String(i + 1).padStart(2, "0")}`), OVERLAY];
+}
+
 /** Builds the reserved Twitchy scenes and sources without changing the active scene. */
 export async function setupObs(config: Config, options: { contentScene?: string } = {}): Promise<void> {
   const url = config.env.OBS_WS_URL;
@@ -115,7 +120,7 @@ export async function setupObs(config: Config, options: { contentScene?: string 
     if (!overlayExisting) {
       await obs.call("CreateInput", {
         sceneName: SCENES.broadcast, inputName: OVERLAY, inputKind: "browser_source",
-        inputSettings: { url: `http://localhost:${config.webPort}/overlay/`, width, height }, sceneItemEnabled: true,
+        inputSettings: { url: `http://127.0.0.1:${config.webPort}/overlay/`, width, height }, sceneItemEnabled: true,
       });
       changes.push(`Created browser overlay: ${OVERLAY}`);
     } else {
@@ -125,7 +130,7 @@ export async function setupObs(config: Config, options: { contentScene?: string 
 
     // Set order only for Twitchy-owned sources, leaving any streamer-owned items intact.
     const finalItems = sceneItems((await obs.call("GetSceneItemList", { sceneName: SCENES.broadcast })).sceneItems);
-    const ownedOrder = [OVERLAY, ...Array.from({ length: maskCount }, (_, i) => `${MASK_PREFIX}${String(i + 1).padStart(2, "0")}`), SCENES.raw];
+    const ownedOrder = broadcastOrder(maskCount);
     for (let index = 0; index < ownedOrder.length; index += 1) {
       const item = finalItems.find((candidate) => candidate.sourceName === ownedOrder[index]);
       if (item) await obs.call("SetSceneItemIndex", { sceneName: SCENES.broadcast, sceneItemId: item.sceneItemId, sceneItemIndex: index });
