@@ -17,7 +17,11 @@ function p95(samples: readonly number[]): number {
   return ordered[Math.max(0, Math.ceil(ordered.length * 0.95) - 1)] ?? 0;
 }
 
-export const start: StartTrack = async (bus, config) => {
+export async function startShield(
+  bus: Parameters<StartTrack>[0],
+  config: Parameters<StartTrack>[1],
+  connectCapture: typeof connectContentCapture = connectContentCapture,
+): ReturnType<StartTrack> {
   const state = new ShieldStateMachine(config.armOnStart, (snapshot) => {
     bus.emit("shield.state", snapshot);
     console.log(`Shield state: ${snapshot.status}${snapshot.reason ? ` (${snapshot.reason})` : ""}`);
@@ -153,7 +157,7 @@ export const start: StartTrack = async (bus, config) => {
     if (stopping || !config.env.OBS_WS_URL) return;
     let connected: ContentCaptureHandle | undefined;
     try {
-      connected = await connectContentCapture(config, {
+      connected = await connectCapture(config, {
         onFrame,
         onError: onCaptureError,
         isArmed: () => state.isArmed,
@@ -233,4 +237,6 @@ export const start: StartTrack = async (bus, config) => {
     if (current && !current.masks.panic) clearLeakEvents(Date.now());
     capture = undefined;
   };
-};
+}
+
+export const start: StartTrack = (bus, config) => startShield(bus, config);
