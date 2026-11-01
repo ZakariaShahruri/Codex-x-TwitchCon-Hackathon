@@ -117,10 +117,10 @@ test("live pool exhaustion expands an existing mask before releasing no coverage
   assert.deepEqual(backend.boxes.get("m2"), oldRight);
 });
 
-test("panic covers the full canvas; unblur clears masks and ignores seen text", async () => {
+test("panic covers the full canvas; unblur lifts it but keeps secrets detected under it masked", async () => {
   const backend = new FakeMasks();
   const masks = manager(backend);
-  const candidate = leak("private-fingerprint", { x: 30, y: 40, w: 20, h: 10 });
+  const candidate = leak("real-secret", { x: 30, y: 40, w: 20, h: 10 });
   await masks.update([candidate], 0);
   await masks.panicNow();
   assert.deepEqual(backend.boxes.get("m1"), { x: 0, y: 0, w: 400, h: 300 });
@@ -128,11 +128,31 @@ test("panic covers the full canvas; unblur clears masks and ignores seen text", 
   await masks.expire(99_999);
   assert.equal(backend.enabled.has("m1"), true);
   assert.deepEqual(backend.boxes.get("m1"), { x: 0, y: 0, w: 400, h: 300 });
+  await masks.update([candidate], 100_000);
   await masks.unblur();
   assert.equal(masks.panic, false);
-  assert.equal(backend.enabled.size, 0);
-  await masks.update([candidate], 10);
-  assert.equal(backend.enabled.size, 0);
+  assert.equal(masks.isIgnored("real-secret"), false);
+  assert.deepEqual([...backend.enabled].map((id) => backend.boxes.get(id)), [{ x: 26, y: 36, w: 28, h: 18 }]);
+});
+
+test("unblur dismisses only what is masked now, never earlier secrets or sensitive regions", async () => {
+  const backend = new FakeMasks();
+  const masks = manager(backend, { maskIds: ["m1", "m2", "m3"] });
+  const earlier = leak("api-key-shown-earlier", { x: 10, y: 10, w: 40, h: 10 });
+  const falsePositive = leak("false-positive", { x: 100, y: 100, w: 40, h: 10 });
+  const region = leak("region", { x: 300, y: 200, w: 50, h: 50 }, "sensitive_region");
+  await masks.update([earlier], 0);
+  await masks.update([], 150);
+  await masks.update([falsePositive, region], 2_000);
+  await masks.unblur();
+  assert.equal(masks.isIgnored("false-positive"), true);
+  assert.equal(masks.isIgnored("region"), false);
+  assert.deepEqual([...backend.enabled].map((id) => backend.boxes.get(id)), [{ x: 296, y: 196, w: 58, h: 58 }]);
+
+  await masks.update([earlier, falsePositive, region], 2_150);
+  assert.equal(masks.isIgnored("api-key-shown-earlier"), false);
+  const shown = [...backend.enabled].map((id) => backend.boxes.get(id)!).sort((a, b) => a.y - b.y);
+  assert.deepEqual(shown, [{ x: 6, y: 6, w: 48, h: 18 }, { x: 296, y: 196, w: 58, h: 58 }]);
 });
 
 test("unblur is serialized after an in-flight placement and cannot be undone by it", async () => {

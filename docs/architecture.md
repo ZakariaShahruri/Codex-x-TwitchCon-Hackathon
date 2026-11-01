@@ -55,7 +55,7 @@ Scene "Twitchy Broadcast"   ← what goes to Twitch (top of list = drawn on top)
 - **Pool exhaustion:** pad boxes, merge overlaps, then merge nearest boxes into larger covering boxes until the plan fits the pool. Never discard a live box. A one-way SHA-256 fingerprint stays in process memory to suppress the same text after `unblur`; plaintext matches are not retained in events, files or logs.
 - **Stop/restart:** graceful stop holds enabled masks for at least `delayMs + safetyMarginMs` before clearing them. On startup, enabled pool sources are adopted and held for that same interval. A full-canvas panic mask remains enabled across stop and restart until `unblur`.
 - **Track lifecycle:** `armOnStart` sets the initial armed state; `on`/`off` gate OCR and detection while existing masks expire normally. `panic` and `unblur` act on the mask manager even while capture is degraded. OBS connection failures retry with exponential backoff; a failed OCR helper is restarted and reported degraded until a frame succeeds.
-- **Events and timing:** a redacted `leak.detected` is emitted only after its box is on the OBS mask pool; `totalBlocked` counts newly active distinct fingerprints. `leak.cleared` follows mask expiry or a successful unblur. `engine.metrics` is emitted every second. Debug timing is enabled with `DEBUG=1`.
+- **Events and timing:** a redacted `leak.detected` is emitted only after its box is on the OBS mask pool; `totalBlocked` counts newly active distinct fingerprints. `leak.cleared` follows mask expiry, or an unblur that dismisses that leak. `engine.metrics` is emitted every second. Debug timing is enabled with `DEBUG=1`.
 - **Unchanged frames:** if the PNG's SHA-256 fingerprint is identical to the previous capture, skip OCR and return the prior boxes so they count as still on screen.
 
 ---
@@ -122,7 +122,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 ### Command semantics
 - `on` / `off`: arm or disarm detection. Masks already placed still expire normally.
 - `panic`: full-canvas mask immediately; stays until `unblur`.
-- `unblur`: removes all masks (false positive or panic over) and ignores re-detection of the same text for this session.
+- `unblur`: during a panic, lifts the panic only; secrets detected under it stay masked. Otherwise dismisses what is masked right now as a false positive and ignores that text for this session. Secrets masked earlier but no longer on screen are never ignored, and configured sensitive regions always stay masked.
 - Only the broadcaster and moderators can issue commands (checked by badge on the chat message).
 
 ---

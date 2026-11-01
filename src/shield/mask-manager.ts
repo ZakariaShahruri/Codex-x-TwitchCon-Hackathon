@@ -18,6 +18,8 @@ interface ActiveBox {
   box: Box;
   expiresAt: number;
   padded: boolean;
+  /** False for configured sensitive regions, which stay masked through unblur. */
+  dismissable: boolean;
 }
 
 interface Slot {
@@ -117,7 +119,6 @@ export function planMaskBoxes(
 export class MaskManager {
   private readonly slots: Slot[];
   private readonly active: ActiveBox[] = [];
-  private readonly seen = new Set<string>();
   private readonly ignored = new Set<string>();
   private readonly holdMs: number;
   private readonly now: () => number;
@@ -142,7 +143,7 @@ export class MaskManager {
       if (!slot || !valid(existing.box)) continue;
       slot.box = { ...existing.box };
       slot.enabled = true;
-      this.active.push({ fingerprint: `restart-mask-${index}`, box: { ...existing.box }, expiresAt: this.now() + this.holdMs, padded: true });
+      this.active.push({ fingerprint: `restart-mask-${index}`, box: { ...existing.box }, expiresAt: this.now() + this.holdMs, padded: true, dismissable: true });
       if (existing.box.x <= 0 && existing.box.y <= 0 && existing.box.x + existing.box.w >= options.width && existing.box.y + existing.box.h >= options.height)
         this.panicActive = true;
     }
@@ -159,7 +160,6 @@ export class MaskManager {
       const used = new Set<ActiveBox>();
       for (const candidate of candidates) {
         if (!valid(candidate.box) || this.ignored.has(candidate.fingerprint)) continue;
-        this.seen.add(candidate.fingerprint);
         const duplicate = this.active.find((item) => used.has(item) && item.fingerprint === candidate.fingerprint && intersects(item.box, candidate.box));
         if (duplicate) {
           duplicate.box = union(duplicate.box, candidate.box);
@@ -180,7 +180,10 @@ export class MaskManager {
           match.expiresAt = Number.POSITIVE_INFINITY;
           used.add(match);
         } else {
-          const item: ActiveBox = { fingerprint: candidate.fingerprint, box: { ...candidate.box }, expiresAt: Number.POSITIVE_INFINITY, padded: false };
+          const item: ActiveBox = {
+            fingerprint: candidate.fingerprint, box: { ...candidate.box }, expiresAt: Number.POSITIVE_INFINITY, padded: false,
+            dismissable: candidate.kind !== "sensitive_region",
+          };
           this.active.push(item);
           used.add(item);
         }
@@ -209,13 +212,18 @@ export class MaskManager {
     });
   }
 
+  /**
+   * During a panic, only lifts the panic: secrets detected under it stay masked. Otherwise dismisses what is
+   * masked right now (a false positive) and ignores that text for the session. Sensitive regions always stay.
+   */
   unblur(): Promise<void> {
     return this.enqueue(async () => {
-      for (const fingerprint of this.seen) this.ignored.add(fingerprint);
-      for (const item of this.active) this.ignored.add(item.fingerprint);
-      this.active.length = 0;
-      this.panicActive = false;
-      await this.disableAll();
+      if (this.panicActive) this.panicActive = false;
+      else {
+        for (const item of this.active) if (item.dismissable) this.ignored.add(item.fingerprint);
+        this.active.splice(0, this.active.length, ...this.active.filter((item) => !item.dismissable));
+      }
+      await this.render();
     });
   }
 
@@ -230,7 +238,7 @@ export class MaskManager {
         if (!existing) continue;
         if (!valid(existing.box)) throw new Error(`Cannot recover mask ${slot.id}: invalid transform`);
         slot.box = { ...existing.box };
-        this.active.push({ fingerprint: `reconnect-${slot.id}-${at}`, box: { ...existing.box }, expiresAt: at + this.holdMs, padded: true });
+        this.active.push({ fingerprint: `reconnect-${slot.id}-${at}`, box: { ...existing.box }, expiresAt: at + this.holdMs, padded: true, dismissable: true });
         if (existing.box.x <= 0 && existing.box.y <= 0 && existing.box.x + existing.box.w >= this.options.width && existing.box.y + existing.box.h >= this.options.height)
           this.panicActive = true;
       }

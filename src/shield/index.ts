@@ -41,9 +41,17 @@ export const start: StartTrack = async (bus, config) => {
   let lastError = "";
   let terminal: ReadlineInterface | undefined;
 
-  const clearLeakEvents = (at: number): void => {
-    for (const leak of activeLeaks.values()) bus.emit("leak.cleared", { id: leak.id, at });
-    activeLeaks.clear();
+  const clearLeakEvents = (at: number, only: (fingerprint: string) => boolean = () => true): void => {
+    for (const [fingerprint, leak] of activeLeaks) {
+      if (!only(fingerprint)) continue;
+      bus.emit("leak.cleared", { id: leak.id, at });
+      activeLeaks.delete(fingerprint);
+    }
+  };
+  // Lifting a panic dismisses nothing, so only leaks that unblur now ignores are cleared on the overlay.
+  const unblur = async (masks: ContentCaptureHandle["masks"], at: number): Promise<void> => {
+    await masks.unblur();
+    clearLeakEvents(at, (fingerprint) => masks.isIgnored(fingerprint));
   };
 
   const commandListener = async (command: EventMap["shield.command"]): Promise<void> => {
@@ -55,10 +63,7 @@ export const start: StartTrack = async (bus, config) => {
     }
     try {
       if (command.action === "panic") await capture.masks.panicNow();
-      else {
-        await capture.masks.unblur();
-        clearLeakEvents(command.at);
-      }
+      else await unblur(capture.masks, command.at);
     } catch (error) {
       pendingMaskCommands.push(command.action);
       state.degrade(error instanceof Error ? error.message : String(error));
@@ -136,10 +141,7 @@ export const start: StartTrack = async (bus, config) => {
       try {
         const action = queued[index]!;
         if (action === "panic") await masks.panicNow();
-        else {
-          await masks.unblur();
-          clearLeakEvents(at);
-        }
+        else await unblur(masks, at);
       } catch (error) {
         pendingMaskCommands.unshift(...queued.slice(index));
         throw error;
