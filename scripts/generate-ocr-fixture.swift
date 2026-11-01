@@ -5,8 +5,11 @@ import ImageIO
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 let benchmarkMode = arguments.first == "--benchmark"
-let output = arguments.dropFirst(benchmarkMode ? 1 : 0).first ??
-    (benchmarkMode ? "tools/ocr-vision/fixtures/fake-env-1080p.png" : "tools/ocr-vision/fixtures/screen.png")
+// --small draws the same lines at editor size (12px Menlo), where OCR is most likely to miss text.
+let smallMode = benchmarkMode && arguments.dropFirst().first == "--small"
+let output = arguments.dropFirst((benchmarkMode ? 1 : 0) + (smallMode ? 1 : 0)).first ??
+    (smallMode ? "tools/ocr-vision/fixtures/fake-env-1080p-12px.png" :
+     benchmarkMode ? "tools/ocr-vision/fixtures/fake-env-1080p.png" : "tools/ocr-vision/fixtures/screen.png")
 let width = benchmarkMode ? 1920 : 1280
 let height = benchmarkMode ? 1080 : 360
 let colorSpace = CGColorSpaceCreateDeviceRGB()
@@ -57,13 +60,15 @@ if benchmarkMode {
         "DATABASE_URL=postgres://demo:FakePassword123@localhost:5432/app",
         "EMAIL=streamer@example.invalid",
     ]
+    let fontSize: CGFloat = smallMode ? 12 : 34
+    let lineHeight: CGFloat = smallMode ? 20 : 112
     for (index, line) in lines.enumerated() {
-        let baseline = CGFloat(860 - index * 112)
-        draw(String(index + 1), baseline: baseline, x: 105, size: 34,
+        let baseline = 860 - CGFloat(index) * lineHeight
+        draw(String(index + 1), baseline: baseline, x: 105, size: fontSize,
              color: CGColor(red: 0.48, green: 0.51, blue: 0.56, alpha: 1))
         let color = index == 0 ? CGColor(red: 0.48, green: 0.68, blue: 0.49, alpha: 1) :
             CGColor(red: 0.82, green: 0.85, blue: 0.88, alpha: 1)
-        draw(line, baseline: baseline, x: 200, size: 34, color: color)
+        draw(line, baseline: baseline, x: 200, size: fontSize, color: color)
     }
 } else {
     draw("EMAIL: streamer@example.com", baseline: 245)
