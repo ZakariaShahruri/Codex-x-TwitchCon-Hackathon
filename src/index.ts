@@ -35,7 +35,7 @@ process.on("SIGTERM", () => void shutdown(0));
 for (const [name, start] of tracks) {
   try { stops.push([name, await start(bus, config)]); }
   catch (error) {
-    console.error(`Starting ${name} failed:`, error);
+    console.error(`Starting ${name} failed: ${error instanceof Error ? error.message : String(error)}`);
     await shutdown(1);
   }
 }

@@ -25,6 +25,15 @@ function sendJson(socket: WebSocket, message: WireEvent | WireSnapshot): void {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 }
 
+/** Turns a failed listen into one actionable message; the caller exits instead of serving stale pages. */
+function bindError(port: number, error: unknown): Error {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "EADDRINUSE") {
+    return new Error(`Port ${port} on 127.0.0.1 is already in use, probably by another npm run dev or npm run demo:events that is still running. Find it with: lsof -iTCP:${port} -sTCP:LISTEN`);
+  }
+  return new Error(`Web server could not listen on 127.0.0.1:${port}: ${error instanceof Error ? error.message : String(error)}`);
+}
+
 export const start: StartTrack = async (bus, config) => {
   const sockets = new Set<WebSocket>();
   const removers: (() => void)[] = [];
@@ -97,9 +106,9 @@ export const start: StartTrack = async (bus, config) => {
     });
     console.log(`web server listening at http://127.0.0.1:${config.webPort}/overlay/`);
   } catch (error) {
-    console.error(`Web server could not bind 127.0.0.1:${config.webPort}; continuing without browser pages:`, error);
     for (const remove of removers) remove();
-    return async () => {};
+    wsServer.close();
+    throw bindError(config.webPort, error);
   }
 
   return async () => {

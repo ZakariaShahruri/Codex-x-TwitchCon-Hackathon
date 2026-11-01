@@ -34,6 +34,16 @@ async function close(socket: WebSocket): Promise<void> {
 }
 const config = (webPort: number) => ({ webPort } as Config);
 
+test("fails fast with an actionable message when the port is taken", async () => {
+  const blocker = createServer();
+  await new Promise<void>((resolve) => blocker.listen(0, "127.0.0.1", resolve));
+  const address = blocker.address();
+  assert.ok(address && typeof address !== "string");
+  try {
+    await assert.rejects(start(new EventBus(), config(address.port)), new RegExp(`Port ${address.port} .*already in use.*lsof -iTCP:${address.port} -sTCP:LISTEN`));
+  } finally { await new Promise<void>((resolve) => blocker.close(() => resolve())); }
+});
+
 test("serves the overlay page at /overlay/ and refuses paths outside it", async () => {
   const bus = new EventBus();
   const port = await freePort();

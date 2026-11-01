@@ -5,7 +5,10 @@ import { start } from "./index.js";
 
 const config = await loadConfig();
 const bus = new EventBus();
-const stop = await start(bus, config);
+const stop = await start(bus, config).catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+});
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const at = () => Date.now();
 let stopping = false;
