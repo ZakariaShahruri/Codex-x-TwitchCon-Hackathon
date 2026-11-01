@@ -185,20 +185,31 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 2. **OCR latency:** the chosen Apple Vision text + barcode pass on a 1080p `.env` editor frame must stay under 200 ms p95 and reliably read the fake credentials.
 3. **End to end (manual):** put OBS credentials in `.env`, ensure `npm run obs:setup` has created the layout, then run `DEBUG=1 npm run dev:commands`. Confirm `Shield state: armed`, select `Twitchy Broadcast` as the program scene, and type a fake address such as `demo@example.invalid` into a large editor window visible in `Twitchy Content`. The opaque mask should appear over the address in `Twitchy Broadcast` immediately, before the delayed content reaches it. Logs should show per-frame `capture · ocr · detect · mask · total` timings, `Leak #1 email: capture-to-mask … / 1000ms delay; worst case incl. 150ms capture interval … / 900ms available (within budget)`, and one-second `engine.metrics` in debug mode. Record the OBS preview/program and stopwatch for the demo evidence.
 
-### Benchmark with live OBS (2026-11-01)
+### Benchmark with live OBS (2026-11-02)
 
 `npm run bench:ocr` on macOS 15.6.1, arm64, OBS 33.0.1, 1920×1080 canvas; 30 samples after 3 warmups. Fixture: `tools/ocr-vision/fixtures/fake-env-1080p.png` (synthetic values only, regenerate with `npm run fixture:ocr`).
 
 | Operation | p50 | p95 | Target |
 |---|---:|---:|---|
-| OBS screenshot (`Twitchy Content`, PNG) | 41.7 ms | 43.5 ms | < 50 ms ✅ |
-| Apple Vision OCR `fast` | 18.8 ms | 20.0 ms | reads 3/4 keys ❌ |
-| Apple Vision OCR `accurate` | 95.0 ms | 98.4 ms | < 200 ms ✅, reads 4/4 keys |
+| OBS screenshot (`Twitchy Content`, PNG) | 156.1 ms | 181.8 ms | < 50 ms ❌ |
+| Apple Vision OCR `fast` | 20.8 ms | 24.0 ms | reads 3/4 keys ❌ |
+| Apple Vision OCR `accurate` | 103.4 ms | 115.4 ms | < 200 ms ✅, reads 4/4 keys |
 
-- **Go/no-go #2 passes.** The Node client uses `accurate`. Worst-case frame subtotal: capture interval 150 + screenshot 43.5 + OCR 98.4 + detect/mask targets 30 ≈ **322 ms of the 900 ms available** (`delayMs` 1000 − `safetyMarginMs` 100).
-- `fast` missed `FAKE_AWS_SECRET_0123456789abcdef` in every sample, so it is not safe for detection.
+- **Go/no-go #2 passes.** The Node client uses `accurate`. In the 2026-11-02 rerun, worst-case frame subtotal was capture interval 150 + screenshot 181.8 + OCR 115.4 + detect/mask targets 30 ≈ **477 ms of the 900 ms available** (`delayMs` 1000 − `safetyMarginMs` 100).
+- The screenshot component target (<50 ms p95) failed in this rerun at 181.8 ms; the total estimated frame subtotal remains inside the §1 available budget. The earlier 2026-11-01 idle-OBS sample was 43.5 ms p95, so screenshot latency varied substantially between runs.
+- `fast` missed `FAKE_AWS_SECRET_0123456789abcdef` in every sample, so it is not safe for detection. Accurate recognition read all four benchmark values in all 30 samples.
 - **Vision inserts spaces after colons**: `oauth:fake-twitch-token…` reads as `oauth: fake-twitch-token…` and `postgres://demo:FakePassword123@…` as `postgres://demo: FakePassword123@…`. Word boxes split on whitespace, so a secret can span several words. Detectors must match on the line text with this kind of whitespace tolerated, then mask the union of the words the match covers.
-- Still open: #1 (stopwatch check of the stacked delay) and the manual #3 run above. The benchmark numbers are from idle OBS; engine timing logs measure the real path under load.
+- Still open: #1 (stopwatch check of the stacked delay). The benchmark numbers are from idle OBS; engine timing logs measure the real path under load.
+
+### Live OBS fixture run (2026-11-02)
+
+OBS 33.0.1, 1920×1080, `Twitchy Broadcast` selected as program. Before the test, `Twitchy Content` contained only its nested `Scene`; `Twitchy Broadcast` contained `Twitchy Raw`, 12 disabled masks and the enabled `Twitchy Overlay`.
+
+- Added `fake-env-1080p-12px.png` above the nested scene. Accurate OCR and Tier 1 detectors emitted five distinct events (3 `api_key`, 1 `password`, 1 `email`). Capture-to-mask logs were 276–347 ms; worst-case including the 150 ms capture interval was 426–497 ms of 900 ms available.
+- OBS reported one enabled merged mask at `{x:194,y:224,w:469,h:104}`; it covered all five detected boxes. After moving the image source by `(60,50)`, the detector boxes moved by median `(61,51)`. All five old positions remained covered by the trail.
+- Two additional `password` events appeared during the moved-source interval; the test could not distinguish whether these came from newly exposed underlying content or OCR/detector variation. Treat movement-path counts as unresolved until a controlled background scene is used.
+- After removing the image, the original five `leak.cleared` events arrived 1432 ms later and the two later password events 2033 ms later. All masks were disabled after 2237 ms. The longer tails include time spent detecting the first absent frame after the source change.
+- Cleanup restored the exact `Twitchy Content` and `Twitchy Broadcast` item lists, order, enabled states and transforms from the pre-test snapshot. The temporary source was removed and all masks were disabled.
 
 ### Full-resolution font/theme stress matrix (2026-11-02)
 
