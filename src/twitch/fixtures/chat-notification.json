@@ -1,0 +1,11 @@
+{
+  "metadata": { "message_id": "chat-1", "message_type": "notification", "message_timestamp": "2026-11-01T00:00:01Z", "subscription_type": "channel.chat.message", "subscription_version": "1" },
+  "payload": {
+    "subscription": { "id": "sub-chat", "type": "channel.chat.message", "version": "1" },
+    "event": {
+      "chatter_user_id": "9001", "chatter_user_login": "salina", "chatter_user_name": "Salina",
+      "badges": [{ "set_id": "broadcaster", "id": "1", "info": "" }, { "set_id": "moderator", "id": "1", "info": "" }, { "set_id": "subscriber", "id": "12", "info": "16" }],
+      "message": { "text": "!panic test message", "fragments": [{ "type": "text", "text": "!panic test message" }] }
+    }
+  }
+}

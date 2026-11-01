@@ -1,0 +1,4 @@
+{
+  "metadata": { "message_id": "revoke-1", "message_type": "revocation", "message_timestamp": "2026-11-01T00:00:03Z", "subscription_type": "channel.chat.message", "subscription_version": "1" },
+  "payload": { "subscription": { "id": "sub-chat", "status": "version_removed", "type": "channel.chat.message", "version": "1", "transport": { "method": "websocket", "session_id": "session-main" } } }
+}
