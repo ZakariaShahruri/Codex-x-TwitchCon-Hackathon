@@ -76,6 +76,23 @@ test("connection-string passwords and Bearer tokens mask only the secret", () =>
   assertOnlyMatchedWord(token, header.words[2]!);
 });
 
+test("OCR readings of the same secret share one fingerprint; different secrets do not", () => {
+  // Vision readings of one fake token at different screen offsets (see docs/architecture.md §9).
+  const readings = [
+    "TWITCH_BOT_TOKEN=oauth: fake-twitch-token-abcdef0123456789",
+    "TWITCH_BOT_TOKEN=oauth: fake-twitch-token=abcdef0123456789",
+    "TWITCH_BOT_TOKEN=oauth: fake-twitch-token=-abcdef0123456789",
+    "TWITCH_BOT_TOKEN=oauth: fake-twitch-tOken-abcdef0l23456789",
+  ];
+  const fingerprints = readings.map((text) => detectApiKeys([line(text)])[0]?.fingerprint);
+  assert.ok(fingerprints[0]);
+  assert.equal(new Set(fingerprints).size, 1);
+
+  const other = detectApiKeys([line("TWITCH_BOT_TOKEN=oauth: fake-twitch-token-abcdef0123456780")])[0]?.fingerprint;
+  assert.ok(other);
+  assert.notEqual(other, fingerprints[0]);
+});
+
 test("detectors catch common real-world secrets", () => {
   const secrets = [
     "DATABASE_URL=postgres://demo:FakePassword123@localhost:5432/app",

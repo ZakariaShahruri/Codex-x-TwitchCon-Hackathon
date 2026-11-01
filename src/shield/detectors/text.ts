@@ -71,6 +71,15 @@ export function wordUnionForRange(line: OCRTextLine, range: TextRange): Box | un
   return { x: left, y: top, w: right - left, h: bottom - top };
 }
 
+/**
+ * Identity of a matched secret that survives OCR noise between frames: Vision reads the same `-` as `=` or `=-`,
+ * and confuses O/0 and l/I/1. Without this, one key would count as several leaks while it moves on screen.
+ */
+export function leakFingerprint(matched: string): string {
+  const stable = matched.toLowerCase().replace(/o/g, "0").replace(/[il]/g, "1").replace(/[^a-z0-9]/g, "");
+  return createHash("sha256").update(stable).digest("hex");
+}
+
 export function candidatesForRanges(
   line: OCRTextLine,
   kind: LeakCandidate["kind"],
@@ -88,7 +97,6 @@ export function candidatesForRanges(
   return merged.flatMap((range) => {
     const box = wordUnionForRange(line, range);
     if (!box) return [];
-    const fingerprint = createHash("sha256").update(compact.slice(range.start, range.end).toLowerCase()).digest("hex");
-    return [{ kind, box, preview, fingerprint }];
+    return [{ kind, box, preview, fingerprint: leakFingerprint(compact.slice(range.start, range.end)) }];
   });
 }
