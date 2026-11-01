@@ -9,7 +9,7 @@ const supported = process.platform === "darwin" && existsSync(executablePath) &&
 
 test("Apple Vision finds fixture words with boxes in the expected canvas regions", { skip: !supported }, async () => {
   const png = readFileSync(fixturePath);
-  const ocr = new AppleVisionOCR({ level: "accurate", timeoutMs: 5_000 });
+  const ocr = new AppleVisionOCR({ timeoutMs: 5_000 });
   try {
     const [lines, barcodes] = await Promise.all([ocr.recognize(png), ocr.barcodes(png)]);
     assert.ok(lines.some((line) => line.text.includes("streamer@example.com")));

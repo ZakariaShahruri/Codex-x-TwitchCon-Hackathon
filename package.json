@@ -11,6 +11,8 @@
     "demo:events": "tsx src/web/demo-events.ts",
     "obs:setup": "tsx scripts/obs-setup.ts",
     "ocr:build": "node scripts/build-ocr-vision.mjs",
+    "fixture:ocr": "swift scripts/generate-ocr-fixture.swift --benchmark",
+    "bench:ocr": "npm run ocr:build && tsx scripts/bench-ocr.ts",
     "pretest": "node scripts/build-ocr-vision.mjs --if-supported",
     "test": "tsx --test 'src/**/*.test.ts' 'scripts/**/*.test.ts'",
     "typecheck": "tsc --noEmit"

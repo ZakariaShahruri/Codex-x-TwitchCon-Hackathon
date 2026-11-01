@@ -50,7 +50,7 @@ export class AppleVisionOCR implements OCRService {
 
   constructor(options: AppleVisionOCROptions = {}) {
     this.executablePath = options.executablePath ?? `${process.cwd()}/tools/ocr-vision/.build/twitchy-ocr`;
-    this.level = options.level ?? "fast";
+    this.level = options.level ?? "accurate";
     this.timeoutMs = options.timeoutMs ?? 500;
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1) throw new Error("OCR timeoutMs must be a positive integer");
   }
