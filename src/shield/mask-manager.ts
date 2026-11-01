@@ -125,6 +125,7 @@ export class MaskManager {
   private readonly wait: (ms: number) => Promise<void>;
   private panicActive = false;
   private stopped = false;
+  private lastUpdateAt: number | undefined;
   private operations: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: MaskManagerOptions) {
@@ -156,7 +157,16 @@ export class MaskManager {
   update(candidates: readonly LeakCandidate[], at = this.now()): Promise<void> {
     return this.enqueue(async () => {
       if (this.stopped) throw new Error("Mask manager has stopped");
+      const captureGap = this.lastUpdateAt !== undefined && at - this.lastUpdateAt > this.holdMs;
+      const preGapBoxes = captureGap ? this.active.map((item) => ({ ...item, box: { ...item.box } })) : [];
       this.active.splice(0, this.active.length, ...this.active.filter((item) => item.expiresAt > at));
+      if (captureGap) {
+        for (const previous of preGapBoxes) {
+          if (previous.expiresAt <= at && candidates.some((candidate) => valid(candidate.box) && candidate.fingerprint === previous.fingerprint && !this.ignored.has(candidate.fingerprint) && !contains(candidate.box, previous.box))) {
+            this.active.push({ ...previous, expiresAt: at + this.holdMs });
+          }
+        }
+      }
       const used = new Set<ActiveBox>();
       for (const candidate of candidates) {
         if (!valid(candidate.box) || this.ignored.has(candidate.fingerprint)) continue;
@@ -193,6 +203,7 @@ export class MaskManager {
         if (!used.has(item) && item.expiresAt === Number.POSITIVE_INFINITY) item.expiresAt = at + this.holdMs;
       }
       await this.render();
+      this.lastUpdateAt = at;
     });
   }
 

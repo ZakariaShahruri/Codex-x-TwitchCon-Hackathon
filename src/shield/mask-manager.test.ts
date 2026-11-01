@@ -59,6 +59,27 @@ test("a capture gap keeps the mask until a later frame proves the text is gone",
   assert.equal(backend.enabled.has("m1"), false);
 });
 
+test("a secret redetected after an OCR miss and long capture gap keeps its prior position covered", async () => {
+  const backend = new FakeMasks();
+  const masks = manager(backend, { maskIds: ["m1", "m2"] });
+  const beforeGap = leak("same-secret", { x: 20, y: 30, w: 40, h: 20 });
+  const afterGap = leak("same-secret", { x: 220, y: 130, w: 40, h: 20 });
+  await masks.update([beforeGap], 0);
+  await masks.update([], 100); // One OCR miss marks it absent.
+  await masks.update([afterGap], 2_500); // No frame arrived during the gap; the text may have stayed at the old pixels.
+
+  const covers = (box: Box) => [...backend.enabled].some((id) => {
+    const mask = backend.boxes.get(id)!;
+    return mask.x <= box.x && mask.y <= box.y && mask.x + mask.w >= box.x + box.w && mask.y + mask.h >= box.y + box.h;
+  });
+  assert.equal(covers(beforeGap.box), true, "old pixels remain in the delay buffer through the recovered capture");
+  assert.equal(covers(afterGap.box), true, "the newly observed position is masked too");
+  await masks.expire(3_599);
+  assert.equal(covers(beforeGap.box), true);
+  await masks.expire(3_600);
+  assert.equal(covers(beforeGap.box), false, "the old trail expires one hold window after re-detection");
+});
+
 test("scrolling text keeps only its recent trail covered instead of one ever-growing box", async () => {
   const backend = new FakeMasks();
   const masks = manager(backend, { maskIds: ["m1", "m2", "m3"], width: 1920, height: 1080 });
