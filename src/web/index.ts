@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
-import { browserEvents, redacted, type EventMap } from "../shared/events.js";
+import { browserEvents, type EventMap } from "../shared/events.js";
 import type { EventBus } from "../shared/bus.js";
 import type { Config } from "../shared/config.js";
 import type { StartTrack } from "../shared/track.js";
@@ -11,14 +11,18 @@ import type { StartTrack } from "../shared/track.js";
 type Role = "overlay" | "dashboard";
 type BrowserEvent = typeof browserEvents[number];
 type WireEvent = { event: BrowserEvent; payload: EventMap[BrowserEvent] };
+/** Sent once when a page connects, so a reloaded page shows the current state without replaying (and re-animating) old events. */
+export type WireSnapshot = {
+  snapshot: { shieldState?: EventMap["shield.state"]; leakCount: number; privateState?: EventMap["private.state"] };
+};
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const roleEvents: Record<Role, ReadonlySet<BrowserEvent>> = {
   overlay: new Set(["leak.detected", "leak.cleared", "shield.state"]),
   dashboard: new Set(browserEvents),
 };
 
-function send(socket: WebSocket, event: BrowserEvent, payload: EventMap[BrowserEvent]): void {
-  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ event, payload } satisfies WireEvent));
+function sendJson(socket: WebSocket, message: WireEvent | WireSnapshot): void {
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 }
 
 export const start: StartTrack = async (bus, config) => {
@@ -42,7 +46,7 @@ export const start: StartTrack = async (bus, config) => {
       if (event === "leak.detected") latestLeakCount = (payload as EventMap["leak.detected"]).totalBlocked;
       for (const socket of sockets) {
         const role = (socket as WebSocket & { twitchyRole?: Role }).twitchyRole;
-        if (role && roleEvents[role].has(event)) send(socket, event, payload as EventMap[BrowserEvent]);
+        if (role && roleEvents[role].has(event)) sendJson(socket, { event, payload });
       }
     });
   }
@@ -54,7 +58,8 @@ export const start: StartTrack = async (bus, config) => {
       const role: Role | undefined = urlPath.startsWith("/overlay/") ? "overlay" : urlPath.startsWith("/dashboard/") ? "dashboard" : undefined;
       if (!role) { res.writeHead(404).end("Not found"); return; }
       const base = join(root, "web", role);
-      const relative = normalize(urlPath.slice(role.length + 2)).replace(/^[/\\]+/, "") || "index.html";
+      const requested = urlPath.slice(role.length + 2);
+      const relative = normalize(requested === "" || requested.endsWith("/") ? `${requested}index.html` : requested).replace(/^[/\\]+/, "");
       const path = join(base, relative);
       if (!path.startsWith(`${base}/`) && path !== base) { res.writeHead(403).end("Forbidden"); return; }
       if (!(await stat(path)).isFile()) { res.writeHead(404).end("Not found"); return; }
@@ -74,9 +79,11 @@ export const start: StartTrack = async (bus, config) => {
       (client as WebSocket & { twitchyRole?: Role }).twitchyRole = role;
       sockets.add(client);
       client.on("close", () => sockets.delete(client));
-      if (latestState) send(client, "shield.state", latestState);
-      send(client, "leak.detected", { id: "replay-count", kind: "custom_rule", box: { x: 0, y: 0, w: 0, h: 0 }, preview: redacted(""), totalBlocked: latestLeakCount, at: Date.now() });
-      if (role === "dashboard" && latestPrivate) send(client, "private.state", latestPrivate);
+      sendJson(client, { snapshot: {
+        shieldState: latestState,
+        leakCount: latestLeakCount,
+        privateState: role === "dashboard" ? latestPrivate : undefined,
+      } });
     });
   });
 

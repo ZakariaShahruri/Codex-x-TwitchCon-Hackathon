@@ -5,6 +5,14 @@ const countLabel = document.querySelector("#count");
 const boxes = new Map();
 let totalBlocked = 0;
 
+function showState(state) {
+  stateLabel.textContent = state.status.toUpperCase();
+}
+function showCount(count) {
+  totalBlocked = Math.max(totalBlocked, count);
+  countLabel.textContent = `${totalBlocked} leaks blocked`;
+}
+
 function resize() {
   const ratio = window.devicePixelRatio || 1;
   canvas.width = Math.round(innerWidth * ratio);
@@ -24,15 +32,18 @@ function draw() {
 function connect() {
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   const socket = new WebSocket(`${scheme}//${location.host}/ws/overlay`);
-  socket.addEventListener("open", () => socket.send(JSON.stringify({ role: "overlay" })));
   socket.addEventListener("message", ({ data }) => {
     let message;
     try { message = JSON.parse(data); } catch { return; }
-    if (message.event === "shield.state") stateLabel.textContent = message.payload.status.toUpperCase();
+    if (message.snapshot) {
+      if (message.snapshot.shieldState) showState(message.snapshot.shieldState);
+      showCount(message.snapshot.leakCount);
+      return;
+    }
+    if (message.event === "shield.state") showState(message.payload);
     if (message.event === "leak.detected") {
-      totalBlocked = Math.max(totalBlocked, message.payload.totalBlocked);
-      countLabel.textContent = `${totalBlocked} leaks blocked`;
-      if (message.payload.id !== "replay-count") boxes.set(message.payload.id, message.payload.box);
+      showCount(message.payload.totalBlocked);
+      boxes.set(message.payload.id, message.payload.box);
       draw();
     }
     if (message.event === "leak.cleared") { boxes.delete(message.payload.id); draw(); }
