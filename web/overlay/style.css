@@ -1,5 +1,4 @@
 :root {
-  color-scheme: dark;
   --mint: #83f3cf;
   --ink: #10152a;
   --gold: #ffdc68;
@@ -24,7 +23,7 @@ body { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   transform-origin: 50% 50%;
   will-change: transform;
 }
-#twitchy.ready { transition: transform 520ms cubic-bezier(.2,.82,.23,1); }
+#twitchy.ready { transition: transform var(--travel-duration, 520ms) cubic-bezier(.2,.82,.23,1); }
 #mascot {
   position: absolute;
   z-index: 2;
@@ -78,7 +77,6 @@ body { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
 .counter-shield { width: calc(24px * var(--scale)); height: calc(27px * var(--scale)); flex: none; color: var(--mint); filter: drop-shadow(2px 2px #26304a); }
 #count { min-width: 1ch; color: var(--gold); font-weight: 900; font-variant-numeric: tabular-nums; }
 .counter-copy { color: #e2def8; font-size: .72em; }
-#counter.tick { animation: counter-pop 380ms steps(4, end); }
 
 /* The center stays transparent: the real OBS mask below this overlay hides the leak. */
 #cover {
@@ -112,7 +110,6 @@ body { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
 @keyframes alarm-ring { 0% { transform: scale(.78) rotate(0); } 100% { transform: scale(1.16) rotate(12deg); } }
 @keyframes alarm-sign { from { transform: rotate(-12deg) translateY(0); } to { transform: rotate(12deg) translateY(-4px); } }
 @keyframes dust { 0% { opacity: 0; transform: translateX(0) scale(.5); } 50% { opacity: .9; } 100% { opacity: 0; transform: translateX(-14px) scale(1); } }
-@keyframes counter-pop { 0% { transform: scale(1); } 38% { transform: scale(1.1); } 72% { transform: scale(.97); } 100% { transform: scale(1); } }
 @keyframes cover-sweep { 0% { opacity: 0; transform: scaleX(.08); } 28% { opacity: 1; } 62% { opacity: 1; transform: scaleX(1); } 84% { opacity: 1; } 100% { opacity: 0; transform: scaleX(1); } }
 
 @media (prefers-reduced-motion: reduce) {
