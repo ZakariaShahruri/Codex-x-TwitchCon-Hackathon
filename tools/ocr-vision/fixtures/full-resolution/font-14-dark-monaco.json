@@ -1,0 +1,59 @@
+{
+  "font" : "Monaco",
+  "fontSize" : 14,
+  "height" : 1080,
+  "secrets" : [
+    {
+      "box" : {
+        "h" : 16,
+        "w" : 398,
+        "x" : 323,
+        "y" : 208
+      },
+      "kind" : "api_key",
+      "line" : 0
+    },
+    {
+      "box" : {
+        "h" : 13,
+        "w" : 340,
+        "x" : 339,
+        "y" : 388
+      },
+      "kind" : "api_key",
+      "line" : 1
+    },
+    {
+      "box" : {
+        "h" : 14,
+        "w" : 273,
+        "x" : 381,
+        "y" : 568
+      },
+      "kind" : "api_key",
+      "line" : 2
+    },
+    {
+      "box" : {
+        "h" : 13,
+        "w" : 133,
+        "x" : 440,
+        "y" : 748
+      },
+      "kind" : "password",
+      "line" : 3
+    },
+    {
+      "box" : {
+        "h" : 15,
+        "w" : 204,
+        "x" : 247,
+        "y" : 928
+      },
+      "kind" : "email",
+      "line" : 4
+    }
+  ],
+  "theme" : "dark",
+  "width" : 1920
+}
