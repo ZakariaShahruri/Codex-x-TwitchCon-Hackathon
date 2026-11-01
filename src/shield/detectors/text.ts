@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Box } from "../../shared/events.js";
 import type { OCRTextLine } from "../ocr/types.js";
 import type { LeakCandidate, TextRange } from "./types.js";
@@ -78,8 +79,11 @@ export function candidatesForRanges(
     if (previous && range.start <= previous.end) previous.end = Math.max(previous.end, range.end);
     else merged.push({ ...range });
   }
+  const compact = compactText(line.text).text;
   return merged.flatMap((range) => {
     const box = wordUnionForRange(line, range);
-    return box ? [{ kind, box, preview }] : [];
+    if (!box) return [];
+    const fingerprint = createHash("sha256").update(compact.slice(range.start, range.end).toLowerCase()).digest("hex");
+    return [{ kind, box, preview, fingerprint }];
   });
 }

@@ -51,7 +51,9 @@ Scene "Twitchy Broadcast"   ← what goes to Twitch (top of list = drawn on top)
 ### Masks
 - **Style:** opaque pixel-art censor block. Opaque is safer than blur (blurred text can sometimes be recovered) and needs no OBS plugins. A blur look is Tier 3.
 - **Pool:** `maskPoolSize` color sources created at setup, enabled and moved with `SetSceneItemTransform` / `SetSceneItemEnabled`. No creating sources at runtime.
-- **Lifetime rule (critical):** each detected box lives until `lastSeen + delayMs + safetyMarginMs`. The delayed output still shows the secret after it disappears from the live picture, so the mask must outlast it. Active masks = all unexpired boxes; when the text moves, the old box stays until it expires.
+- **Lifetime rule (critical):** each detected box lives until `lastSeen + delayMs + safetyMarginMs`. The delayed output still shows the secret after it disappears from the live picture, so the mask must outlast it. Active masks = all unexpired boxes; when text moves, the old position remains covered as the candidate box expands to include the new position.
+- **Pool exhaustion:** pad boxes, merge overlaps, then merge nearest boxes into larger covering boxes until the plan fits the pool. Never discard a live box. A one-way SHA-256 fingerprint stays in process memory to suppress the same text after `unblur`; plaintext matches are not retained in events, files or logs.
+- **Stop/restart:** graceful stop holds enabled masks for at least `delayMs + safetyMarginMs` before clearing them. On startup, enabled pool sources are adopted and held for that same interval. A full-canvas panic mask remains enabled across stop and restart until `unblur`.
 - **Unchanged frames:** if the PNG's SHA-256 fingerprint is identical to the previous capture, skip OCR and return the prior boxes so the engine can refresh `lastSeen`.
 
 ---

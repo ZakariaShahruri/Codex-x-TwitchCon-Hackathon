@@ -47,7 +47,7 @@ test("accurate engine OCR detects the benchmark fixture leak boxes", { skip: !en
     intervalMs: 150,
     enabledDetectors: ["api_key", "email", "password", "sensitive_region"],
     sensitiveRegions: [],
-    onFrame: (frame) => frames.push(frame),
+    onFrame: (frame) => { frames.push(frame); },
   });
   try {
     await loop.tick();

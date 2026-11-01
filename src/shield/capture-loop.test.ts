@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { LeakKind } from "../shared/events.js";
-import { CaptureLoop } from "./capture-loop.js";
+import { CaptureLoop, type CaptureFrame } from "./capture-loop.js";
 
 const noRegions: [] = [];
 const detectorKinds: LeakKind[] = ["api_key", "email", "password", "sensitive_region"];
@@ -44,7 +44,7 @@ test("capture loop never overlaps ticks while capture or OCR is busy", async () 
 
 test("identical PNG bytes skip OCR and emit the previous boxes for lastSeen refresh", async () => {
   let recognitionCalls = 0;
-  const frames: Array<{ leaks: Array<{ kind: string }>; unchanged: boolean }> = [];
+  const frames: CaptureFrame[] = [];
   const region = { x: 20, y: 30, w: 40, h: 50 };
   const loop = new CaptureLoop({
     capture: async () => Buffer.from("same frame"),
@@ -52,7 +52,7 @@ test("identical PNG bytes skip OCR and emit the previous boxes for lastSeen refr
     intervalMs: 100,
     enabledDetectors: ["sensitive_region"],
     sensitiveRegions: [region],
-    onFrame: (frame) => frames.push(frame),
+    onFrame: (frame) => { frames.push(frame); },
   });
   await loop.tick();
   const firstAt = frames[0]!.unchanged;
@@ -60,7 +60,10 @@ test("identical PNG bytes skip OCR and emit the previous boxes for lastSeen refr
   assert.equal(recognitionCalls, 1);
   assert.equal(firstAt, false);
   assert.equal(frames[1]!.unchanged, true);
-  assert.deepEqual(frames[0]!.leaks, [{ kind: "sensitive_region", box: region, preview: "sensitive region" }]);
+  assert.equal(frames[0]!.leaks[0]!.kind, "sensitive_region");
+  assert.deepEqual(frames[0]!.leaks[0]!.box, region);
+  assert.equal(frames[0]!.leaks[0]!.preview, "sensitive region");
+  assert.equal(typeof frames[0]!.leaks[0]!.fingerprint, "string");
   assert.deepEqual(frames[1]!.leaks, frames[0]!.leaks);
   await loop.stop();
 });

@@ -1,7 +1,7 @@
 import type { StartTrack } from "../shared/track.js";
 import { connectContentCapture } from "./capture-loop.js";
 
-export const start: StartTrack = async (_bus, config) => {
+export const start: StartTrack = async (bus, config) => {
   console.log("track A (shield) ready");
   if (!config.env.OBS_WS_URL) {
     console.log("Shield capture idle: set OBS_WS_URL in .env to connect to OBS.");
@@ -11,6 +11,7 @@ export const start: StartTrack = async (_bus, config) => {
   let stopCapture: (() => Promise<void>) | undefined;
   try {
     stopCapture = await connectContentCapture(config, {
+      bus,
       onFrame: (frame) => {
         if (!frame.unchanged && frame.leaks.length > 0)
           console.log(`Shield detected ${frame.leaks.length} candidate box(es) in Twitchy Content.`);

@@ -56,9 +56,12 @@ test("password detector masks only assigned values including OCR-spaced values",
 
 test("sensitive regions preserve valid canvas boxes and reject invalid boxes", () => {
   const region = { x: 100, y: 80, w: 240, h: 90 };
-  assert.deepEqual(detectSensitiveRegions([region, { x: 0, y: 0, w: 0, h: 12 }]), [
-    { kind: "sensitive_region", box: region, preview: "sensitive region" },
-  ]);
+  const [candidate] = detectSensitiveRegions([region, { x: 0, y: 0, w: 0, h: 12 }]);
+  assert.ok(candidate);
+  assert.equal(candidate.kind, "sensitive_region");
+  assert.deepEqual(candidate.box, region);
+  assert.equal(candidate.preview, "sensitive region");
+  assert.match(candidate.fingerprint, /^[a-f0-9]{64}$/u);
 });
 
 test("detectors avoid prose, code references, UUIDs, hashes and versions", () => {
