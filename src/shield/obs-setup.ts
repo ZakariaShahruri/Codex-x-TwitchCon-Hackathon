@@ -9,6 +9,8 @@ const SCENES = {
 const OVERLAY = "Twitchy Overlay";
 const FILTER_PREFIX = "Twitchy Render Delay ";
 const MASK_PREFIX = "Twitchy Mask ";
+/** CreateInput needs the versioned kind; OBS 30+ only accepts color_source_v3. */
+const MASK_KIND = "color_source_v3";
 
 type JsonRecord = Record<string, unknown>;
 type SceneItem = { sourceName: string; sceneItemId: number; sceneItemEnabled: boolean };
@@ -90,16 +92,16 @@ export async function setupObs(config: Config, options: { contentScene?: string 
     for (let index = 1; index <= maskCount; index += 1) {
       const name = `${MASK_PREFIX}${String(index).padStart(2, "0")}`;
       const existing = inputList.find((item) => item.inputName === name);
-      if (existing && existing.inputKind !== "color_source")
-        throw new Error(`OBS input name conflict: ${name} exists as ${existing.inputKind}, expected color_source. Rename it manually and retry.`);
+      if (existing && !existing.inputKind.startsWith("color_source"))
+        throw new Error(`OBS input name conflict: ${name} exists as ${existing.inputKind}, expected ${MASK_KIND}. Rename it manually and retry.`);
       if (existing && !sceneItems((await obs.call("GetSceneItemList", { sceneName: SCENES.broadcast })).sceneItems).some((item) => item.sourceName === name))
         throw new Error(`OBS input name conflict: ${name} is not in ${SCENES.broadcast}; refusing to repurpose it.`);
       if (!existing) {
         await obs.call("CreateInput", {
-          sceneName: SCENES.broadcast, inputName: name, inputKind: "color_source",
+          sceneName: SCENES.broadcast, inputName: name, inputKind: MASK_KIND,
           inputSettings: { color: 0xff000000, width, height }, sceneItemEnabled: false,
         });
-        inputList.push({ inputName: name, inputKind: "color_source" });
+        inputList.push({ inputName: name, inputKind: MASK_KIND });
         changes.push(`Created hidden mask: ${name}`);
       } else {
         changes.push(`Found mask: ${name}`);
