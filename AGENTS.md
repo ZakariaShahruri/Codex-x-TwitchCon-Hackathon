@@ -29,6 +29,7 @@ This file is about **how we work**. What we build is in `docs/concept.md`; how i
 | `docs/README.md` | Map of all docs |
 | `docs/concept.md` | What we're building and why |
 | `docs/architecture.md` | Tracks, folders, event contract, stack, conventions |
+| `docs/team-notes.md` | What changed in the other track that affects yours |
 | `docs/codex-sessions.md` | Codex session IDs per developer |
 | `docs/devpost.md` | Hackathon rules, submission, judging |
 
@@ -68,6 +69,7 @@ Two developers work at the same time, each with their own Codex and Claude Code,
 - Tracks, their folders and the shared event contract are defined in `docs/architecture.md`. Owners are listed above.
 - Tracks talk **only** through the shared contract. Contract changes come **first**: agree, commit, then build against it. Mock the other side until it's ready.
 - Flag every contract change to both developers and in the commit body.
+- When you change behavior the other track relies on (even with the same event shapes), add a dated note to `docs/team-notes.md` in the same commit.
 - If a task doesn't fit one track, propose the split explicitly before starting.
 
 ## Git
