@@ -86,9 +86,10 @@ test("ordinary unblur clears only current leaks; a previously cleared secret can
   const first = secret("older-secret");
   await h.emitFrame([first], 0);
   await h.emitFrame([], 10);
-  // Use the configured lifetime boundary (first absent frame + delay + margin).
+  await h.emitFrame([], 15);
+  // Use the configured lifetime boundary (second absent frame + delay + margin).
   const hold = h.config.delayMs + h.config.safetyMarginMs;
-  await h.emitFrame([], 10 + hold);
+  await h.emitFrame([], 15 + hold);
   assert.equal(h.events.filter((item) => item.event === "leak.cleared").length, 1);
 
   const current = secret("current-secret");
@@ -118,14 +119,15 @@ test("sensitive regions survive unblur without leak.cleared or repeat leak.detec
   await h.stop();
 });
 
-test("leak.cleared follows the first absent frame plus delay and safety margin", async () => {
+test("leak.cleared follows the second absent frame plus delay and safety margin", async () => {
   const h = await createHarness();
   const candidate = secret("timed-secret");
   await h.emitFrame([candidate], 0);
-  await h.emitFrame([], 200);
-  await h.emitFrame([], 200 + 1_099);
+  await h.emitFrame([], 200); // May be an OCR miss.
+  await h.emitFrame([], 350);
+  await h.emitFrame([], 350 + 1_099);
   assert.equal(h.events.filter((item) => item.event === "leak.cleared").length, 0);
-  await h.emitFrame([], 200 + 1_100);
+  await h.emitFrame([], 350 + 1_100);
   assert.equal(h.events.filter((item) => item.event === "leak.cleared").length, 1);
   await h.stop();
 });

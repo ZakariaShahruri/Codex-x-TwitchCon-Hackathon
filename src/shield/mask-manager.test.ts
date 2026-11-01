@@ -27,7 +27,7 @@ function manager(backend: FakeMasks, extra: Partial<ConstructorParameters<typeof
   });
 }
 
-test("a mask lives until the first frame without the text + delay + safety margin", async () => {
+test("a mask lives until the frame that proves the text is gone + delay + safety margin", async () => {
   const backend = new FakeMasks();
   const masks = manager(backend, { maskIds: ["m1"] });
   await masks.update([leak("secret-a", { x: 20, y: 30, w: 40, h: 20 })], 100);
@@ -37,11 +37,15 @@ test("a mask lives until the first frame without the text + delay + safety margi
   // Still on screen in the last frame: it may stay there until the next capture, so it never expires on its own.
   await masks.expire(5_000);
   assert.equal(backend.enabled.has("m1"), true);
-  // The frame at 5000 is the first proof it is gone; the delayed output shows it until 5000 + 1000 + 100.
+  // One frame without it may be an OCR miss; the second in a row (5150) proves it is gone, and the delayed
+  // output shows it until 5150 + 1000 + 100.
   await masks.update([], 5_000);
-  await masks.expire(6_099);
+  await masks.expire(6_200);
   assert.equal(backend.enabled.has("m1"), true);
-  await masks.expire(6_100);
+  await masks.update([], 5_150);
+  await masks.expire(6_249);
+  assert.equal(backend.enabled.has("m1"), true);
+  await masks.expire(6_250);
   assert.equal(backend.enabled.has("m1"), false);
 });
 
@@ -53,9 +57,24 @@ test("a capture gap keeps the mask until a later frame proves the text is gone",
   await masks.expire(3_000);
   assert.equal(backend.enabled.has("m1"), true);
   await masks.update([], 3_000);
-  await masks.update([], 4_099);
+  await masks.update([], 3_150);
+  await masks.update([], 4_249);
   assert.equal(backend.enabled.has("m1"), true);
-  await masks.update([], 4_100);
+  await masks.update([], 4_250);
+  assert.equal(backend.enabled.has("m1"), false);
+});
+
+test("an OCR miss right before the text really leaves does not start the countdown early", async () => {
+  // Simulation seed 199: the miss at 701 was a frame where the text was still on screen until just before 1083,
+  // so the delayed output shows it until ~2083. Counting from the miss would drop the mask at 1801.
+  const backend = new FakeMasks();
+  const masks = manager(backend, { maskIds: ["m1"] });
+  await masks.update([leak("secret", { x: 40, y: 50, w: 30, h: 20 })], 591);
+  await masks.update([], 701);
+  await masks.update([], 1_083);
+  await masks.expire(2_182);
+  assert.equal(backend.enabled.has("m1"), true);
+  await masks.expire(2_183);
   assert.equal(backend.enabled.has("m1"), false);
 });
 
@@ -65,7 +84,7 @@ test("a secret redetected after an OCR miss and long capture gap keeps its prior
   const beforeGap = leak("same-secret", { x: 20, y: 30, w: 40, h: 20 });
   const afterGap = leak("same-secret", { x: 220, y: 130, w: 40, h: 20 });
   await masks.update([beforeGap], 0);
-  await masks.update([], 100); // One OCR miss marks it absent.
+  await masks.update([], 100); // One OCR miss: not yet proof that it left.
   await masks.update([afterGap], 2_500); // No frame arrived during the gap; the text may have stayed at the old pixels.
 
   const covers = (box: Box) => [...backend.enabled].some((id) => {
@@ -164,6 +183,7 @@ test("unblur dismisses only what is masked now, never earlier secrets or sensiti
   const region = leak("region", { x: 300, y: 200, w: 50, h: 50 }, "sensitive_region");
   await masks.update([earlier], 0);
   await masks.update([], 150);
+  await masks.update([], 300);
   await masks.update([falsePositive, region], 2_000);
   await masks.unblur();
   assert.equal(masks.isIgnored("false-positive"), true);

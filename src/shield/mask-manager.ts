@@ -9,9 +9,9 @@ export interface MaskBackend {
 export interface ExistingMask { id: string; box: Box }
 
 /**
- * One place where detected text is or was on screen. While the latest frame still shows it, `expiresAt` is
- * Infinity: the text may stay on screen until the next capture, so the countdown can only start at the first
- * frame that no longer sees it.
+ * One place where detected text is or was on screen. While it may still be on screen, `expiresAt` is Infinity.
+ * The countdown starts at the first frame that proves it left: one where the same text was detected elsewhere
+ * (it moved), or the second frame in a row where it was not detected at all (the first may be an OCR miss).
  */
 interface ActiveBox {
   fingerprint: string;
@@ -20,6 +20,13 @@ interface ActiveBox {
   padded: boolean;
   /** False for configured sensitive regions, which stay masked through unblur. */
   dismissable: boolean;
+  /** Number of frames in a row in which this text was not detected anywhere. */
+  absentFrames: number;
+  /**
+   * The countdown started because the text was not detected anywhere, which can still be repeated OCR misses,
+   * so if the same text is detected again the countdown restarts from then.
+   */
+  uncertain: boolean;
 }
 
 interface Slot {
@@ -125,7 +132,6 @@ export class MaskManager {
   private readonly wait: (ms: number) => Promise<void>;
   private panicActive = false;
   private stopped = false;
-  private lastUpdateAt: number | undefined;
   private operations: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: MaskManagerOptions) {
@@ -144,7 +150,7 @@ export class MaskManager {
       if (!slot || !valid(existing.box)) continue;
       slot.box = { ...existing.box };
       slot.enabled = true;
-      this.active.push({ fingerprint: `restart-mask-${index}`, box: { ...existing.box }, expiresAt: this.now() + this.holdMs, padded: true, dismissable: true });
+      this.active.push({ fingerprint: `restart-mask-${index}`, box: { ...existing.box }, expiresAt: this.now() + this.holdMs, padded: true, dismissable: true, absentFrames: 0, uncertain: false });
       if (existing.box.x <= 0 && existing.box.y <= 0 && existing.box.x + existing.box.w >= options.width && existing.box.y + existing.box.h >= options.height)
         this.panicActive = true;
     }
@@ -157,16 +163,16 @@ export class MaskManager {
   update(candidates: readonly LeakCandidate[], at = this.now()): Promise<void> {
     return this.enqueue(async () => {
       if (this.stopped) throw new Error("Mask manager has stopped");
-      const captureGap = this.lastUpdateAt !== undefined && at - this.lastUpdateAt > this.holdMs;
-      const preGapBoxes = captureGap ? this.active.map((item) => ({ ...item, box: { ...item.box } })) : [];
-      this.active.splice(0, this.active.length, ...this.active.filter((item) => item.expiresAt > at));
-      if (captureGap) {
-        for (const previous of preGapBoxes) {
-          if (previous.expiresAt <= at && candidates.some((candidate) => valid(candidate.box) && candidate.fingerprint === previous.fingerprint && !this.ignored.has(candidate.fingerprint) && !contains(candidate.box, previous.box))) {
-            this.active.push({ ...previous, expiresAt: at + this.holdMs });
-          }
+      const detected = new Set(candidates.filter((candidate) => valid(candidate.box) && !this.ignored.has(candidate.fingerprint)).map((candidate) => candidate.fingerprint));
+      // Everything still in `active` is masked right now (even across a capture gap), so an uncertain box
+      // whose text is back can be held from this frame before it is dropped.
+      for (const item of this.active) {
+        if (item.uncertain && detected.has(item.fingerprint)) {
+          item.expiresAt = Math.max(item.expiresAt, at + this.holdMs);
+          item.uncertain = false;
         }
       }
+      this.active.splice(0, this.active.length, ...this.active.filter((item) => item.expiresAt > at));
       const used = new Set<ActiveBox>();
       for (const candidate of candidates) {
         if (!valid(candidate.box) || this.ignored.has(candidate.fingerprint)) continue;
@@ -185,25 +191,30 @@ export class MaskManager {
         if (match) {
           // Moved text: the old position left the screen as of this frame, so it keeps its own countdown
           // instead of growing one box along the whole path.
-          if (!contains(candidate.box, match.box)) this.active.push({ ...match, box: { ...match.box }, expiresAt: at + this.holdMs });
+          if (!contains(candidate.box, match.box)) this.active.push({ ...match, box: { ...match.box }, expiresAt: at + this.holdMs, absentFrames: 0, uncertain: false });
           match.box = { ...candidate.box };
           match.expiresAt = Number.POSITIVE_INFINITY;
+          match.absentFrames = 0;
+          match.uncertain = false;
           used.add(match);
         } else {
           const item: ActiveBox = {
             fingerprint: candidate.fingerprint, box: { ...candidate.box }, expiresAt: Number.POSITIVE_INFINITY, padded: false,
-            dismissable: candidate.kind !== "sensitive_region",
+            dismissable: candidate.kind !== "sensitive_region", absentFrames: 0, uncertain: false,
           };
           this.active.push(item);
           used.add(item);
         }
       }
-      // This frame is the first proof these are gone; the delayed output can still show them for holdMs.
+      // Start the countdown once this frame proves the text left; the delayed output still shows it for holdMs.
       for (const item of this.active) {
-        if (!used.has(item) && item.expiresAt === Number.POSITIVE_INFINITY) item.expiresAt = at + this.holdMs;
+        if (used.has(item) || item.expiresAt !== Number.POSITIVE_INFINITY) continue;
+        const movedElsewhere = detected.has(item.fingerprint);
+        if (!movedElsewhere && ++item.absentFrames < 2) continue;
+        item.expiresAt = at + this.holdMs;
+        item.uncertain = !movedElsewhere;
       }
       await this.render();
-      this.lastUpdateAt = at;
     });
   }
 
@@ -249,7 +260,7 @@ export class MaskManager {
         if (!existing) continue;
         if (!valid(existing.box)) throw new Error(`Cannot recover mask ${slot.id}: invalid transform`);
         slot.box = { ...existing.box };
-        this.active.push({ fingerprint: `reconnect-${slot.id}-${at}`, box: { ...existing.box }, expiresAt: at + this.holdMs, padded: true, dismissable: true });
+        this.active.push({ fingerprint: `reconnect-${slot.id}-${at}`, box: { ...existing.box }, expiresAt: at + this.holdMs, padded: true, dismissable: true, absentFrames: 0, uncertain: false });
         if (existing.box.x <= 0 && existing.box.y <= 0 && existing.box.x + existing.box.w >= this.options.width && existing.box.y + existing.box.h >= this.options.height)
           this.panicActive = true;
       }

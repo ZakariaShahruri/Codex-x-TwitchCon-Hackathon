@@ -44,7 +44,15 @@ interface Secret {
   missedLastFrame: boolean;
 }
 
-interface Obligation { id: string; box: Box; until: number }
+/**
+ * Content shown live at time t reaches the broadcast at t + DELAY_MS, so that is when a mask must cover it.
+ * The window is one 50 ms sample wide so a check always lands in it. (Requiring coverage from t itself would
+ * demand masking a secret before OCR has ever seen it.)
+ */
+interface Obligation { id: string; box: Box; from: number; until: number }
+const AIR_WINDOW_MS = 50;
+const airs = (id: string, box: Box, liveAt: number): Obligation =>
+  ({ id, box: { ...box }, from: liveAt + DELAY_MS - AIR_WINDOW_MS, until: liveAt + DELAY_MS });
 
 function candidate(secret: Secret): LeakCandidate {
   return { kind: "api_key", box: { ...secret.box }, preview: "API key", fingerprint: secret.id };
@@ -88,9 +96,8 @@ async function runScenario(seed: number): Promise<void> {
   }));
   const obligations: Obligation[] = [];
   const dismissed = new Set<string>();
-  const previouslyDetected = new Set<string>();
+  const detectedLastFrame = new Set<string>();
   const lastCapturedBoxes = new Map<string, Box>();
-  const previouslyVisible = new Set<string>();
   const trace: string[] = [];
   let armed = true;
   let now = 0;
@@ -106,7 +113,7 @@ async function runScenario(seed: number): Promise<void> {
   const verifyCoverage = (at: number): void => {
     const masks = snapshot();
     for (const obligation of obligations) {
-      if (obligation.until < at || dismissed.has(obligation.id)) continue;
+      if (at < obligation.from || obligation.until < at || dismissed.has(obligation.id)) continue;
       if (!masks.some((mask) => contains(mask, obligation.box))) {
         throw new Error(`seed=${seed} t=${at} secret=${obligation.id} box=${JSON.stringify(obligation.box)} uncovered; active=${JSON.stringify(manager.activeBoxes.map((item) => ({ id: item.fingerprint, box: item.box, until: item.expiresAt })))}; masks=${JSON.stringify(masks)}; trace=${trace.slice(-30).join(" | ")}`);
       }
@@ -127,7 +134,7 @@ async function runScenario(seed: number): Promise<void> {
     trace.push(`frame${frame}@${at}`);
 
     // Ensure both shield states and panic/unblur semantics are exercised, in addition to random commands.
-    if (frame === 5 || (frame > 0 && random.chance(0.025))) {
+    if (frame !== 8 && (frame === 5 || (frame > 0 && random.chance(0.025)))) {
       armed = false;
       offCommandSeen = true;
       trace.push(`off@${at}`);
@@ -149,8 +156,7 @@ async function runScenario(seed: number): Promise<void> {
     // even when simulated OCR misses it on this frame.
     if (armed) {
       for (const secret of secrets) {
-        if (secret.visible && !dismissed.has(secret.id))
-          obligations.push({ id: secret.id, box: { ...secret.box }, until: at + DELAY_MS });
+        if (secret.visible && !dismissed.has(secret.id)) obligations.push(airs(secret.id, secret.box, at));
       }
     }
 
@@ -160,18 +166,19 @@ async function runScenario(seed: number): Promise<void> {
         secret.missedLastFrame = false;
         continue;
       }
-      const forcedMiss = frame === 3 && secret.id === secrets[0]!.id;
+      // OCR may miss a secret for one frame, but only where it was already read: a position OCR never sees
+      // cannot be masked by any engine.
       const previousBox = lastCapturedBoxes.get(secret.id);
       const stayedPut = previousBox !== undefined && contains(previousBox, secret.box) && contains(secret.box, previousBox);
-      const randomMiss = frame > 0 && previouslyVisible.has(secret.id) && previouslyDetected.has(secret.id) && stayedPut && !secret.missedLastFrame && random.chance(0.035);
-      const missed = forcedMiss || randomMiss;
+      const missable = detectedLastFrame.has(secret.id) && stayedPut && !secret.missedLastFrame;
+      const forcedMiss = frame === 3 && secret.id === secrets[0]!.id;
+      const missed = missable && (forcedMiss || (frame > 0 && random.chance(0.035)));
       secret.missedLastFrame = missed;
-      if (!missed) {
-        detected.push(candidate(secret));
-        previouslyDetected.add(secret.id);
-      }
+      if (!missed) detected.push(candidate(secret));
       else trace.push(`OCR-miss:${secret.id}@${at}`);
     }
+    detectedLastFrame.clear();
+    for (const item of detected) detectedLastFrame.add(item.fingerprint);
 
     try {
       await manager.update(detected, at);
@@ -212,11 +219,7 @@ async function runScenario(seed: number): Promise<void> {
       }
     }
     await tick(now, frame);
-    previouslyVisible.clear();
-    for (const secret of secrets) {
-      lastCapturedBoxes.set(secret.id, { ...secret.box });
-      if (secret.visible) previouslyVisible.add(secret.id);
-    }
+    for (const secret of secrets) lastCapturedBoxes.set(secret.id, { ...secret.box });
 
     const interval = random.chance(0.09) ? 401 + random.int(2_600) : 100 + random.int(301);
     const nextAt = now + interval;
@@ -224,8 +227,7 @@ async function runScenario(seed: number): Promise<void> {
     for (let sample = now + 50; sample < nextAt; sample += 50) {
       if (armed) {
         for (const secret of secrets) {
-          if (secret.visible && !dismissed.has(secret.id))
-            obligations.push({ id: secret.id, box: { ...secret.box }, until: sample + DELAY_MS });
+          if (secret.visible && !dismissed.has(secret.id)) obligations.push(airs(secret.id, secret.box, sample));
         }
       }
       verifyCoverage(sample);
@@ -241,9 +243,16 @@ async function runScenario(seed: number): Promise<void> {
   // Clear any panic, then prove expired detections do not leave enabled sources stuck.
   clock.set(now);
   if (manager.panic) await manager.unblur();
-  await manager.update([], now);
+  // Every secret leaves at `now`; what was shown before it still airs during the next DELAY_MS.
   const goneAt = now;
-  await manager.expire(goneAt + HOLD_MS + 400);
+  await manager.update([], goneAt);
+  verifyCoverage(goneAt);
+  await manager.update([], goneAt + 150); // The second absent frame proves the text is gone.
+  for (let at = goneAt + 150; at <= goneAt + HOLD_MS + 400; at += 50) {
+    clock.set(at);
+    await manager.expire(at);
+    verifyCoverage(at);
+  }
   assert.equal(backend.enabled.size, 0, `seed ${seed}: mask remained enabled past delay + safety + one frame`);
 }
 
@@ -269,7 +278,7 @@ async function verifyScrollingBound(): Promise<void> {
   }
 }
 
-const fastSeeds = Number(process.env.MASK_SIM_SEEDS ?? 24);
+const fastSeeds = Number(process.env.MASK_SIM_SEEDS ?? 300);
 
 test(`MaskManager seeded lifetime simulation (${fastSeeds} seeds)`, async () => {
   for (let seed = 1; seed <= fastSeeds; seed += 1) await seededScenario(seed);

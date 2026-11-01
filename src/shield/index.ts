@@ -9,6 +9,7 @@ import { ShieldStateMachine } from "./shield-state.js";
 interface ActiveLeak {
   id: string;
   expiresAt: number;
+  absentFrames: number;
 }
 
 function p95(samples: readonly number[]): number {
@@ -102,7 +103,7 @@ export async function startShield(
       seen.add(candidate.fingerprint);
       let leak = activeLeaks.get(candidate.fingerprint);
       if (!leak) {
-        leak = { id: randomUUID(), expiresAt: Number.POSITIVE_INFINITY };
+        leak = { id: randomUUID(), expiresAt: Number.POSITIVE_INFINITY, absentFrames: 0 };
         activeLeaks.set(candidate.fingerprint, leak);
         totalBlocked += 1;
         bus.emit("leak.detected", {
@@ -121,12 +122,13 @@ export async function startShield(
         console.log(`Leak #${totalBlocked} ${candidate.kind}: capture-to-mask ${captureToMaskMs.toFixed(1)}ms / ${config.delayMs}ms delay; worst case incl. ${config.captureIntervalMs}ms capture interval ${worstCaseMs.toFixed(1)}ms / ${config.delayMs - config.safetyMarginMs}ms available (${safe ? "within budget" : "OVER BUDGET"}).`);
       } else {
         leak.expiresAt = Number.POSITIVE_INFINITY;
+        leak.absentFrames = 0;
       }
     }
 
-    // Same lifetime rule as the masks: the first frame without the leak starts its delay-buffer countdown.
+    // Same lifetime rule as the masks: the second frame in a row without the leak starts its countdown.
     for (const [fingerprint, leak] of activeLeaks) {
-      if (!seen.has(fingerprint) && leak.expiresAt === Number.POSITIVE_INFINITY) leak.expiresAt = frame.at + holdMs;
+      if (!seen.has(fingerprint) && leak.expiresAt === Number.POSITIVE_INFINITY && ++leak.absentFrames >= 2) leak.expiresAt = frame.at + holdMs;
       if (leak.expiresAt > frame.at) continue;
       bus.emit("leak.cleared", { id: leak.id, at: frame.at });
       activeLeaks.delete(fingerprint);
