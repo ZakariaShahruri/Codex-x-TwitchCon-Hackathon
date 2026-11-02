@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Twitchy · Stream console</title>
+  <link rel="stylesheet" href="/dashboard/dashboard.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/dashboard/" aria-label="Twitchy dashboard home">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <span><strong>TWITCHY</strong><small>STREAM CONSOLE</small></span>
+      </a>
+      <div class="top-status"><span class="status-dot" id="connection-dot"></span><span id="connection-label">Connecting to shield…</span></div>
+    </header>
+
+    <main>
+      <section class="hero panel">
+        <div>
+          <p class="eyebrow">YOUR STREAM, GUARDED</p>
+          <h1>Good to see you, streamer.</h1>
+          <p class="muted">Twitchy watches the feed and keeps private moments off air.</p>
+        </div>
+        <div class="hero-state" id="shield-state" data-state="off" aria-live="polite">
+          <span class="pixel-shield" aria-hidden="true">◆</span>
+          <span><small>SHIELD STATUS</small><strong id="state-label">OFFLINE</strong><em id="state-reason">Waiting for shield…</em></span>
+        </div>
+      </section>
+
+      <div class="dashboard-grid">
+        <section class="panel controls-panel">
+          <div class="section-heading"><div><p class="eyebrow">CONTROL ROOM</p><h2>Shield controls</h2></div><span class="chip">LOCAL ONLY</span></div>
+          <div class="control-buttons">
+            <button class="button button-mint" data-action="on"><span>▶</span> Arm shield</button>
+            <button class="button button-quiet" data-action="off"><span>Ⅱ</span> Disarm</button>
+            <button class="button button-panic" data-action="panic"><span>✦</span> Panic mask</button>
+            <button class="button button-quiet" data-action="unblur"><span>↗</span> Unblur</button>
+          </div>
+          <p class="hint" id="command-feedback" aria-live="polite">Commands go directly to your local shield.</p>
+        </section>
+
+        <section class="panel setup-panel">
+          <div class="section-heading"><div><p class="eyebrow">FIRST RUN</p><h2>Quick setup</h2></div><span class="step-badge">01—02</span></div>
+          <button class="button button-outline full" id="obs-setup">▦ &nbsp; Set up OBS</button>
+          <label class="field-label" for="content-scene">Content scene <span>optional</span></label>
+          <input id="content-scene" maxlength="128" placeholder="Uses the scene that's live">
+          <p class="hint" id="obs-result" aria-live="polite">Connect OBS, then run setup once.</p>
+          <div class="divider"></div>
+          <div class="twitch-row"><span class="twitch-glyph">▣</span><div><strong>Twitch connection</strong><small id="twitch-detail">Checking bot status…</small></div><span class="mini-status" id="twitch-pill">WAITING</span></div>
+          <div class="overlay-link"><span><small>OBS OVERLAY URL</small><code id="overlay-url">http://127.0.0.1:4173/overlay/</code></span><button class="copy-button" id="copy-overlay">Copy</button></div>
+        </section>
+
+        <section class="panel watchlist-panel">
+          <div class="section-heading"><div><p class="eyebrow">PRIVATE TO THIS MACHINE</p><h2>Personal watchlist</h2></div><span class="lock-mark" aria-label="Private">▣</span></div>
+          <form id="watchlist-form" autocomplete="off">
+            <label class="field-label" for="watchlist-label">Label</label>
+            <input id="watchlist-label" maxlength="80" placeholder="e.g. home address" required>
+            <label class="field-label" for="watchlist-value">Value <span>hidden while typing</span></label>
+            <div class="input-action"><input id="watchlist-value" type="password" maxlength="512" autocomplete="new-password" placeholder="Private value" required><button class="button button-mint" type="submit">Add</button></div>
+          </form>
+          <p class="hint" id="watchlist-feedback" aria-live="polite">Values are sent directly to the local shield and cleared immediately.</p>
+          <ul class="saved-list" id="watchlist-list" aria-label="Saved watchlist labels"><li class="empty">No labels received yet.</li></ul>
+        </section>
+
+        <section class="panel metrics-panel">
+          <div class="section-heading"><div><p class="eyebrow">LIVE ENGINE</p><h2>Latency & health</h2></div><span id="metric-health" class="health-badge" data-health="none">NO METRICS</span></div>
+          <div class="metric-main"><strong id="metric-p95">—</strong><span>p95 / <b id="metric-budget">—</b> ms budget</span></div>
+          <div class="latency-track"><span id="latency-fill"></span><i></i></div>
+          <div class="metric-pairs"><div><small>LAST FRAME</small><strong id="metric-last">—</strong><span>ms</span></div><div><small>CAPTURE RATE</small><strong id="metric-fps">—</strong><span>fps</span></div></div>
+          <p class="hint" id="metric-updated">Waiting for engine metrics…</p>
+        </section>
+
+        <section class="panel leaks-panel">
+          <div class="section-heading"><div><p class="eyebrow">PRIVATE EVENT LOG</p><h2>Recent saves</h2></div><span id="leak-total" class="chip">0 SAVED</span></div>
+          <ol id="leak-log" class="leak-log"><li class="empty">Detected leaks appear here with redacted previews.</li></ol>
+        </section>
+
+        <section class="panel report-panel">
+          <div class="section-heading"><div><p class="eyebrow">STREAM WRAP-UP</p><h2>End-of-stream report</h2></div><button class="text-button" id="show-report">Show report now</button></div>
+          <p class="hint" id="report-hint">A private summary appears when Twitch reports the stream offline.</p>
+          <div id="report-content" class="report-content" hidden></div>
+        </section>
+
+        <details class="panel rules-panel" id="rules-panel">
+          <summary><span><span class="eyebrow">EXPERIMENTAL · LAST</span><strong>Plain-English rules editor</strong><small>Try a rule, review the compiled summary, then save it.</small></span><span class="disclosure">＋</span></summary>
+          <div class="rules-content">
+            <label class="field-label" for="rule-text">Describe what to hide</label>
+            <textarea id="rule-text" maxlength="2000" rows="3" placeholder="Hide anything with my mom's name"></textarea>
+            <button class="button button-outline" id="compile-rule">Compile rule</button>
+            <p class="hint" id="rule-feedback" aria-live="polite">The compiler runs once; it never scans the stream.</p>
+            <ul class="saved-list" id="rule-list" aria-label="Saved rules"><li class="empty">No saved rules received yet.</li></ul>
+          </div>
+        </details>
+      </div>
+    </main>
+    <footer><span>◈ &nbsp; Twitchy keeps the stream safe.</span><span>LOCAL DASHBOARD · NOTHING LEAVES THIS MACHINE</span></footer>
+  </div>
+  <script type="module" src="/dashboard/dashboard.js"></script>
+</body>
+</html>

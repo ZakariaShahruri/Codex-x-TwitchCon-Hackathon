@@ -6,6 +6,11 @@ Things one track needs to know about the other's changes. Newest first. Each not
 
 - **Small contract change, Track B only:** `twitch.status` gains optional `live?: boolean` (true after `stream.online`, false after `stream.offline`) so the dashboard can build the private end-of-stream report. `twitch.status` only travels Twitch → dashboard; nothing for Track A to do.
 
+## 2026-11-02 · Streamer dashboard (Salina → Zakaria)
+
+- Track B now serves `/dashboard/` with shield controls, OBS setup, Twitch status, watchlist labels, engine metrics, a private redacted leak log/report and a collapsed experimental rules editor. The local browser bridge validates bounded commands from dashboard sockets only; overlay sockets stay receive-only, and `config.updated` is never logged or returned to a browser.
+- Track B emits `twitch.status` connection and token updates plus `live: true/false` on online/offline. The dashboard uses the stream transition for its private end-of-stream report. No additional shared event shape changed.
+
 ## 2026-11-02 · Chat cheers for saves (Salina → Zakaria)
 
 - Twitch emits the existing `chat.cheer { by, at }` event for `!cheer`, `GG`, `PogChamp`, `<3` and "good job Twitchy" within 10 seconds after a save. It allows one cheer per viewer per save and caps accepted cheers at three per second.
