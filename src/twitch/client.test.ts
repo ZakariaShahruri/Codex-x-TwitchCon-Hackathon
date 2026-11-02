@@ -111,6 +111,22 @@ test("keepalive timeout reconnects with a fresh session", async () => {
   await stop();
 });
 
+test("logs one detailed repeated socket failure and summarizes suppression after recovery", async () => {
+  const h = harness({ retryBaseMs: 5, retryMaxMs: 10 });
+  const stop = await h.start(new EventBus(), config());
+  h.sockets[0]!.emit("close", { code: 1006, reason: "connection reset" });
+  await new Promise((resolve) => setTimeout(resolve, 12));
+  h.sockets[1]!.emit("close", { code: 1006, reason: "connection reset" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  h.sockets[2]!.message(await fixture("session-welcome"));
+  await flush();
+
+  assert.equal(h.logs.filter((line) => line.includes("socket closed (1006: connection reset); reconnecting in")).length, 1);
+  assert.ok(h.logs.some((line) => line.includes("1 repeated failures suppressed")));
+  assert.ok(h.logs.some((line) => line.includes("reconnecting in 5 ms")));
+  await stop();
+});
+
 test("session_reconnect keeps the old socket until the replacement welcomes and carries subscriptions over", async () => {
   const h = harness();
   const stop = await h.start(new EventBus(), config());
@@ -221,7 +237,9 @@ test("!twitchy replies once per user cooldown", async () => {
   const socket = h.sockets[0]!;
   socket.message(await fixture("session-welcome"));
   await flush();
-  bus.emit("leak.detected", { id: "leak1", kind: "email", box: { x: 1, y: 1, w: 2, h: 2 }, preview: "j…@gmail.com" as any, totalBlocked: 4, at: 1 });
+  for (let totalBlocked = 1; totalBlocked <= 4; totalBlocked += 1) {
+    bus.emit("leak.detected", { id: `leak${totalBlocked}`, kind: "email", box: { x: 1, y: 1, w: 2, h: 2 }, preview: "email" as any, totalBlocked, at: totalBlocked });
+  }
   bus.emit("shield.state", { status: "degraded", at: 2 });
   socket.message(await chatFrame("!twitchy", "stats-1", "", "viewer-7"));
   socket.message(await chatFrame("!twitchy", "stats-2", "", "viewer-7"));
@@ -230,6 +248,20 @@ test("!twitchy replies once per user cooldown", async () => {
   const sent = h.requests.filter((request) => request.url.includes("/chat/messages"));
   assert.equal(sent.length, 1);
   assert.equal(sent[0]?.body.message, "🛡 4 leaks blocked this stream · shield degraded");
+  await stop();
+});
+
+test("!twitchy uses singular leak grammar", async () => {
+  const h = harness({ chatMessageGapMs: 1 });
+  const bus = new EventBus();
+  const stop = await h.start(bus, config());
+  h.sockets[0]!.message(await fixture("session-welcome"));
+  await flush();
+  bus.emit("leak.detected", { id: "one", kind: "email", box: { x: 1, y: 1, w: 2, h: 2 }, preview: "redacted" as any, totalBlocked: 1, at: 1 });
+  h.sockets[0]!.message(await chatFrame("!twitchy", "one-leak", "", "viewer-one"));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  assert.ok(h.requests.some((request) => request.url.includes("/chat/messages") && request.body.message === "🛡 1 leak blocked this stream · shield off"));
   await stop();
 });
 
@@ -280,6 +312,6 @@ test("stream.online auto-arms and stream.offline sends the leak count", async ()
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   assert.deepEqual(commands.map(({ action, by }) => ({ action, by })), [{ action: "on", by: "stream.online" }]);
-  assert.ok(h.requests.some((request) => request.url.includes("/chat/messages") && request.body.message === "🛡 Twitchy blocked 1 leaks this stream"));
+  assert.ok(h.requests.some((request) => request.url.includes("/chat/messages") && request.body.message === "🛡 Twitchy blocked 1 leak this stream"));
   await stop();
 });

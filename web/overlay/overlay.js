@@ -65,6 +65,19 @@ function sendHomeAndClearQueue() {
   setCount(latestLeakCount);
 }
 
+function resetToSnapshot() {
+  runVersion += 1;
+  queue.length = 0;
+  wakePause?.();
+  cover.classList.remove("play");
+  cover.style.display = "none";
+  delete twitchy.dataset.action;
+  twitchy.classList.remove("ready");
+  const home = homePosition();
+  place(home.x, home.y);
+  requestAnimationFrame(() => twitchy.classList.add("ready"));
+}
+
 function setState(state) {
   const status = ["off", "armed", "degraded", "panic"].includes(state?.status) ? state.status : "off";
   stateStatus = status;
@@ -160,6 +173,7 @@ async function playQueue() {
 
 function handleMessage(message) {
   if (message?.snapshot) {
+    resetToSnapshot();
     latestLeakCount = Number.isFinite(message.snapshot.leakCount) ? Math.max(0, Math.floor(message.snapshot.leakCount)) : 0;
     setCount(latestLeakCount, false, true);
     setState(message.snapshot.shieldState);
@@ -183,7 +197,12 @@ function handleMessage(message) {
 function connect() {
   clearTimeout(reconnectTimer);
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(`${scheme}//${location.host}/ws/overlay`);
+  let socket;
+  try { socket = new WebSocket(`${scheme}//${location.host}/ws/overlay`); }
+  catch {
+    reconnectTimer = setTimeout(connect, 1000);
+    return;
+  }
   socket.addEventListener("message", ({ data }) => {
     try { handleMessage(JSON.parse(data)); } catch { /* Ignore malformed frames and keep the overlay alive. */ }
   });

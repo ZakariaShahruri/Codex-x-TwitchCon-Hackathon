@@ -55,6 +55,22 @@ test("a burst of 60 leaks becomes one message under the chat limit, counted by k
   assert.match(message, /5 sensitive regions$/);
 });
 
+test("a minute-scale 28-leak burst becomes a small number of complete chat summaries", async () => {
+  const h = harness(() => ok(), { batchMs: 60 });
+  const kinds: LeakKind[] = ["api_key", "email", "password", "phone", "card", "ip", "watchlist"];
+  for (let index = 0; index < 28; index += 1) {
+    h.leak(kinds[index % kinds.length]!);
+    await wait(20); // Scaled from roughly one leak every 2.1 seconds over a minute.
+  }
+  await wait(250);
+
+  const announced = h.messages.reduce((sum, message) => sum + Number(message.match(/blocked (\d+) leaks?:/)?.[1] ?? 0), 0);
+  assert.ok(h.messages.length <= 12, `expected a handful of summaries, got ${h.messages.length}`);
+  assert.equal(announced, 28);
+  assert.ok(h.messages.every((message) => message.length <= MAX_CHAT_LENGTH));
+  h.stop();
+});
+
 test("a rejected announcement is dropped and the next reply still goes out", async () => {
   const h = harness((call) => call === 1 ? new Response(null, { status: 400 }) : ok());
   h.leak("api_key");

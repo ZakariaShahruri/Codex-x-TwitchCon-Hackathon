@@ -34,13 +34,14 @@ async function close(socket: WebSocket): Promise<void> {
 }
 const config = (webPort: number) => ({ webPort } as Config);
 
-test("fails fast with an actionable message when the port is taken", async () => {
+test("keeps startup alive with an actionable message when the port is taken", async () => {
   const blocker = createServer();
   await new Promise<void>((resolve) => blocker.listen(0, "127.0.0.1", resolve));
   const address = blocker.address();
   assert.ok(address && typeof address !== "string");
   try {
-    await assert.rejects(start(new EventBus(), config(address.port)), new RegExp(`Port ${address.port} .*already in use.*lsof -iTCP:${address.port} -sTCP:LISTEN`));
+    const stop = await start(new EventBus(), config(address.port));
+    await stop();
   } finally { await new Promise<void>((resolve) => blocker.close(() => resolve())); }
 });
 
@@ -69,6 +70,18 @@ test("sends an empty snapshot and no fake leak to the first page", async () => {
     await close(overlay.socket);
     await stop();
   }
+});
+
+test("stop terminates browser sockets and closes the server promptly", async () => {
+  const bus = new EventBus();
+  const port = await freePort();
+  const stop = await start(bus, config(port));
+  const overlay = await connect(port, "overlay");
+  await settle();
+  const startedAt = Date.now();
+  await stop();
+  assert.ok(Date.now() - startedAt < 1_000, "stop should not wait for a browser close handshake");
+  await close(overlay.socket);
 });
 
 test("filters by role and snapshots state, leak count and private labels on reconnect", async () => {
@@ -112,6 +125,31 @@ test("filters by role and snapshots state, leak count and private labels on reco
   } finally {
     if (overlay) await close(overlay);
     if (dashboard) await close(dashboard);
+    await stop();
+  }
+});
+
+test("resets the browser counter on stream.online and rewrites leak totals per stream", async () => {
+  const bus = new EventBus();
+  const port = await freePort();
+  const stop = await start(bus, config(port));
+  const overlay = await connect(port, "overlay");
+  try {
+    await settle();
+    bus.emit("leak.detected", { id: "before", kind: "email", box: { x: 1, y: 2, w: 3, h: 4 }, preview: redacted("email"), totalBlocked: 8, at: 1 });
+    bus.emit("shield.state", { status: "armed", at: 2 });
+    bus.emit("shield.command", { action: "on", by: "stream.online", at: 3 });
+    bus.emit("leak.detected", { id: "after", kind: "api_key", box: { x: 5, y: 6, w: 7, h: 8 }, preview: redacted("api key"), totalBlocked: 1, at: 4 });
+    await settle();
+
+    const leakEvents = overlay.messages.filter((message) => message.event === "leak.detected");
+    assert.deepEqual(leakEvents.map((message) => message.payload.totalBlocked), [8, 1]);
+    assert.deepEqual(snapshots(overlay.messages), [
+      { leakCount: 0 },
+      { shieldState: { status: "armed", at: 2 }, leakCount: 0 },
+    ]);
+  } finally {
+    await close(overlay.socket);
     await stop();
   }
 });

@@ -16,6 +16,7 @@ const HELIX_SUBSCRIPTIONS_URL = "https://api.twitch.tv/helix/eventsub/subscripti
 
 interface SocketMessage { data: unknown }
 interface SocketClose { code?: number; reason?: string }
+interface SocketError { message?: string; error?: unknown }
 export interface EventSubSocket {
   readyState?: number;
   addEventListener(type: string, listener: (event: any) => void, options?: unknown): void;
@@ -92,12 +93,12 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     });
     let shieldStatus: EventMap["shield.state"]["status"] = "off";
     let leakCount = 0;
-    let lastTotalBlocked = 0;
-    let streamLeakBaseline = 0;
+    let streamStarted = false;
+    let streamLeakCount = 0;
     const stateListener = (state: EventMap["shield.state"]) => { shieldStatus = state.status; };
     const leakCountListener = (leak: EventMap["leak.detected"]) => {
-      lastTotalBlocked = leak.totalBlocked;
-      leakCount = Math.max(0, lastTotalBlocked - streamLeakBaseline);
+      if (streamStarted) leakCount = ++streamLeakCount;
+      else leakCount = leak.totalBlocked;
     };
     bus.on("shield.state", stateListener);
     bus.on("leak.detected", leakCountListener);
@@ -126,7 +127,7 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
         cooldowns.delete(key);
         cooldowns.set(key, now);
         if (cooldowns.size > 20_000) cooldowns.delete(cooldowns.keys().next().value!);
-        sender.sendReply(`🛡 ${leakCount} leaks blocked this stream · shield ${shieldStatus}`);
+        sender.sendReply(`🛡 ${leakCount} ${leakCount === 1 ? "leak" : "leaks"} blocked this stream · shield ${shieldStatus}`);
         return;
       }
       const actions: Record<string, EventMap["shield.command"]["action"]> = {
@@ -150,6 +151,32 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     let candidateRetryTimer: Timer | undefined;
     let retryAttempt = 0;
     let stopped = false;
+    let lastFailureSignature: string | undefined;
+    let suppressedFailureCount = 0;
+
+    const retryText = (ms: number) => ms >= 1_000
+      ? `${Number((ms / 1_000).toFixed(1))} s`
+      : `${ms} ms`;
+    const reportFailure = (signature: string, description: string, delay: number) => {
+      if (lastFailureSignature === signature) {
+        suppressedFailureCount += 1;
+        return;
+      }
+      lastFailureSignature = signature;
+      suppressedFailureCount = 0;
+      logger.warn(`[twitch] EventSub ${description}; reconnecting in ${retryText(delay)}.`);
+    };
+    const reportRecovery = () => {
+      if (!lastFailureSignature) return;
+      logger.log(`[twitch] EventSub connection recovered${suppressedFailureCount ? `; ${suppressedFailureCount} repeated failures suppressed` : ""}.`);
+      lastFailureSignature = undefined;
+      suppressedFailureCount = 0;
+    };
+    const socketErrorDetail = (event: SocketError) => {
+      const error = asRecord(event.error);
+      const detail = event.message || (typeof error?.message === "string" ? error.message : "network error");
+      return detail.replace(/wss?:\/\/\S+/gi, "EventSub endpoint").replace(/[\r\n]+/g, " ").slice(0, 180);
+    };
 
     const clearConnectionTimers = (connection: Connection) => {
       if (connection.welcomeTimer) clearTimeout(connection.welcomeTimer);
@@ -169,55 +196,57 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       return true;
     };
 
-    const scheduleReconnect = (delay?: number) => {
-      if (stopped || active || candidate || reconnectTimer) return;
-      const backoff = Math.min(retryBaseMs * (2 ** retryAttempt), retryMaxMs);
-      retryAttempt += 1;
+    const scheduleReconnect = (delay?: number, failure?: { signature: string; description: string }) => {
+      if (stopped || active || candidate || reconnectTimer) return undefined;
+      const waitMs = delay ?? Math.min(retryBaseMs * (2 ** retryAttempt++), retryMaxMs);
+      if (failure) reportFailure(failure.signature, failure.description, waitMs);
       reconnectTimer = setTimeout(() => {
         reconnectTimer = undefined;
         if (!stopped && !active && !candidate) {
           try { openConnection(EVENTSUB_URL, "active", undefined, false); }
           catch (error) {
-            logger.error(`[twitch] Could not open EventSub socket (${error instanceof Error ? error.message : "socket error"}); retrying.`);
-            scheduleReconnect();
+            const detail = error instanceof Error ? error.message : "network error";
+            scheduleReconnect(undefined, { signature: `open:${detail}`, description: `socket open failed (${detail})` });
           }
         }
-      }, delay ?? backoff);
+      }, waitMs);
+      return waitMs;
     };
 
-    const scheduleCandidateRetry = (url: string, previous: Connection) => {
+    const scheduleCandidateRetry = (url: string, previous: Connection, failure: { signature: string; description: string }) => {
       if (stopped || candidateRetryTimer) return;
-      const delay = Math.min(retryBaseMs * (2 ** retryAttempt), retryMaxMs);
-      retryAttempt += 1;
-      logger.warn(`[twitch] EventSub handover socket failed; retrying the supplied reconnect URL in ${delay} ms while the current socket stays open.`);
+      const delay = Math.min(retryBaseMs * (2 ** retryAttempt++), retryMaxMs);
+      reportFailure(failure.signature, failure.description.startsWith("replacement") ? failure.description : `replacement ${failure.description}`, delay);
       candidateRetryTimer = setTimeout(() => {
         candidateRetryTimer = undefined;
         if (!stopped && !candidate && active === previous) {
           try { openConnection(url, "candidate", previous, true); }
           catch (error) {
-            logger.warn(`[twitch] Could not open EventSub reconnect URL (${error instanceof Error ? error.message : "socket error"}); retaining the current socket.`);
-            scheduleCandidateRetry(url, previous);
+            const detail = error instanceof Error ? error.message : "network error";
+            scheduleCandidateRetry(url, previous, { signature: `candidate-open:${detail}`, description: `socket open failed (${detail})` });
           }
         }
         else if (!stopped && !active && !candidate) scheduleReconnect();
       }, delay);
     };
 
-    const failConnection = (connection: Connection, reason: string) => {
+    const failConnection = (connection: Connection, failure: { signature: string; description: string }) => {
       const wasActive = active === connection;
       const wasCandidate = candidate === connection;
       const previous = connection.previous;
       const url = connection.url;
       if (!removeConnection(connection, true)) return;
       if (stopped) return;
-      logger.warn(`[twitch] EventSub ${wasCandidate ? "replacement " : ""}socket ${reason}.`);
-      if (wasCandidate && previous && active === previous) scheduleCandidateRetry(url, previous);
-      else if (!active && !candidate) scheduleReconnect();
+      if (wasCandidate && previous && active === previous) scheduleCandidateRetry(url, previous, failure);
+      else if (!active && !candidate) scheduleReconnect(undefined, failure);
+      else if (wasActive && candidate) logger.warn("[twitch] EventSub active socket failed during handover; waiting for the replacement welcome.");
     };
 
     const startWelcomeTimer = (connection: Connection) => {
       if (connection.welcomeTimer) clearTimeout(connection.welcomeTimer);
-      connection.welcomeTimer = setTimeout(() => failConnection(connection, "did not send a welcome message in time; reconnecting"), welcomeTimeoutMs);
+      connection.welcomeTimer = setTimeout(() => failConnection(connection, {
+        signature: "welcome-timeout", description: "socket did not send session_welcome before timeout",
+      }), welcomeTimeoutMs);
     };
 
     const startKeepaliveTimer = (connection: Connection) => {
@@ -225,7 +254,9 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       connection.welcomeTimer = undefined;
       if (connection.keepaliveTimer) clearTimeout(connection.keepaliveTimer);
       const timeoutMs = Math.max(0, (connection.keepaliveSeconds ?? 10) * 1_000 + keepaliveGraceMs);
-      connection.keepaliveTimer = setTimeout(() => failConnection(connection, `missed keepalive for ${timeoutMs} ms; reconnecting`), timeoutMs);
+      connection.keepaliveTimer = setTimeout(() => failConnection(connection, {
+        signature: "keepalive-timeout", description: `socket missed keepalive for ${retryText(timeoutMs)}`,
+      }), timeoutMs);
     };
 
     const makeSubscriptionBody = (type: typeof SUBSCRIPTIONS[number]["type"], sessionId: string) => {
@@ -246,9 +277,8 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     };
 
     const authenticationFailed = (connection: Connection) => {
-      logger.error("[twitch] EventSub subscription still returned 401; retrying with a fresh session.");
       if (!removeConnection(connection, true)) return;
-      scheduleReconnect(authRetryMs);
+      scheduleReconnect(authRetryMs, { signature: "helix-subscription-401", description: "Helix subscription returned 401" });
     };
 
     const subscribeAll = async (connection: Connection) => {
@@ -262,15 +292,13 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       if (unauthorized) { authenticationFailed(connection); return; }
       const failures = results.filter((result) => "error" in result || ("status" in result && (result.status < 200 || result.status >= 300)));
       if (failures.length) {
-        for (const failure of failures) {
-          const detail = "error" in failure ? "network error" : `HTTP ${failure.status}`;
-          logger.error(`[twitch] Could not create EventSub subscription ${failure.type} (${detail}); retrying with a fresh session.`);
-        }
-        failConnection(connection, "subscription setup failed; reconnecting");
+        const detail = failures.map((failure) => `${failure.type} ${"error" in failure ? "network error" : `HTTP ${failure.status}`}`).join(", ");
+        failConnection(connection, { signature: `subscription:${detail}`, description: `subscription setup failed (${detail})` });
         return;
       }
       connection.subscribed = true;
       retryAttempt = 0;
+      reportRecovery();
       logger.log("[twitch] EventSub subscriptions active: channel.chat.message, stream.online, stream.offline.");
     };
 
@@ -287,11 +315,11 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
         if (code >= 200 && code < 300) logger.log(`[twitch] Resubscribed to ${type} after recoverable revocation (${status}).`);
         else {
           logger.error(`[twitch] Could not resubscribe to ${type} after ${status} (HTTP ${code}); retrying with a fresh session.`);
-          failConnection(connection, "recoverable revocation resubscribe failed; reconnecting");
+          failConnection(connection, { signature: `revocation:${type}:${code}`, description: `could not resubscribe to ${type} after ${status} (HTTP ${code})` });
         }
       } catch {
         logger.error(`[twitch] Network error resubscribing to ${type} after ${status}; it will be retried with a fresh session.`);
-        failConnection(connection, "recoverable revocation resubscribe failed; reconnecting");
+        failConnection(connection, { signature: `revocation:${type}:network`, description: `network error resubscribing to ${type} after ${status}` });
       }
     };
 
@@ -303,6 +331,7 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       active = connection;
       if (previous && previous !== connection) removeConnection(previous, true);
       retryAttempt = 0;
+      reportRecovery();
       logger.log("[twitch] EventSub reconnect handover complete.");
       return true;
     };
@@ -311,10 +340,13 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       connection.sessionId = typeof session.id === "string" ? session.id : undefined;
       connection.keepaliveSeconds = Number.isFinite(session.keepalive_timeout_seconds) ? session.keepalive_timeout_seconds : 10;
       startKeepaliveTimer(connection);
-      if (!connection.sessionId) { failConnection(connection, "welcome message had no session ID; reconnecting"); return; }
+      if (!connection.sessionId) {
+        failConnection(connection, { signature: "welcome:no-session", description: "socket welcome had no session ID" });
+        return;
+      }
       if (connection.role === "candidate") {
         if (!connection.inheritedSubscriptions) {
-          failConnection(connection, "replacement session cannot inherit subscriptions; reconnecting");
+          failConnection(connection, { signature: "handover:no-inheritance", description: "replacement session cannot inherit subscriptions" });
           return;
         }
         connection.subscribed = true;
@@ -348,12 +380,15 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
         case "session_reconnect": {
           const session = asRecord(payload.session);
           const url = session?.reconnect_url;
-          if (typeof url !== "string" || !url) { logger.error("[twitch] EventSub reconnect message had no reconnect_url; keeping the current socket and retrying separately."); return; }
+          if (typeof url !== "string" || !url) {
+            logger.warn("[twitch] EventSub reconnect message lacked reconnect_url; retaining the current socket until its keepalive timeout.");
+            return;
+          }
           if (candidate) removeConnection(candidate, true);
           try { openConnection(url, "candidate", connection, true); }
           catch (error) {
-            logger.warn(`[twitch] Could not open EventSub reconnect URL (${error instanceof Error ? error.message : "socket error"}); keeping the current socket.`);
-            scheduleCandidateRetry(url, connection);
+            const detail = socketErrorDetail({ message: error instanceof Error ? error.message : "network error" });
+            scheduleCandidateRetry(url, connection, { signature: `candidate-open:${detail}`, description: `socket open failed (${detail})` });
           }
           return;
         }
@@ -367,13 +402,14 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
             const event = asRecord(payload.event);
             if (subscription?.type === "stream.online") {
               logger.log(`[twitch] stream.online${typeof event?.broadcaster_user_name === "string" ? `: ${event.broadcaster_user_name}` : "."}`);
-              streamLeakBaseline = lastTotalBlocked;
+              streamStarted = true;
+              streamLeakCount = 0;
               leakCount = 0;
               bus.emit("shield.command", { action: "on", by: "stream.online", at: Date.now() });
             }
             if (subscription?.type === "stream.offline") {
               logger.log(`[twitch] stream.offline${typeof event?.broadcaster_user_name === "string" ? `: ${event.broadcaster_user_name}` : "."}`);
-              sender.sendReply(`🛡 Twitchy blocked ${leakCount} leaks this stream`);
+              sender.sendReply(`🛡 Twitchy blocked ${leakCount} ${leakCount === 1 ? "leak" : "leaks"} this stream`);
             }
           }
           return;
@@ -399,25 +435,31 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       if (role === "candidate") candidate = connection;
       else active = connection;
       startWelcomeTimer(connection);
-      socket.addEventListener("message", (event: SocketMessage) => { void handleMessage(connection, event.data).catch((error) => logger.error("[twitch] EventSub message handler failed:", error)); });
-      socket.addEventListener("error", () => failConnection(connection, "error; reconnecting"));
+      socket.addEventListener("message", (event: SocketMessage) => { void handleMessage(connection, event.data).catch(() => logger.error("[twitch] EventSub message handler failed; connection remains open.")); });
+      socket.addEventListener("error", (event: SocketError) => {
+        const detail = socketErrorDetail(event);
+        failConnection(connection, { signature: `error:${detail}`, description: `socket error (${detail})` });
+      });
       socket.addEventListener("close", (event: SocketClose) => {
         if (!sockets.has(connection)) return;
         const wasActive = active === connection;
         const wasCandidate = candidate === connection;
         removeConnection(connection, false);
         if (stopped) return;
-        logger.warn(`[twitch] EventSub ${wasCandidate ? "replacement " : ""}socket closed${event.code ? ` (${event.code}${event.reason ? `: ${event.reason}` : ""})` : ""}.`);
-        if (wasCandidate && previous && active === previous) scheduleCandidateRetry(url, previous);
-        else if (!active && !candidate) scheduleReconnect();
-        else if (wasActive && candidate) logger.warn("[twitch] Current EventSub socket closed while handover is in progress; waiting for the replacement welcome.");
+        const code = event.code === undefined ? "unknown code" : String(event.code);
+        const reason = event.reason ? socketErrorDetail({ message: event.reason }) : "";
+        const description = `${wasCandidate ? "replacement " : ""}socket closed (${code}${reason ? `: ${reason}` : ""})`;
+        const failure = { signature: `close:${code}:${reason}`, description };
+        if (wasCandidate && previous && active === previous) scheduleCandidateRetry(url, previous, failure);
+        else if (!active && !candidate) scheduleReconnect(undefined, failure);
+        else if (wasActive && candidate) logger.warn(`[twitch] EventSub ${description}; waiting up to ${retryText(welcomeTimeoutMs)} for the replacement welcome.`);
       });
     }
 
     try { openConnection(EVENTSUB_URL, "active"); }
     catch (error) {
-      logger.error(`[twitch] Could not open EventSub socket (${error instanceof Error ? error.message : "socket error"}); retrying.`);
-      scheduleReconnect();
+      const detail = socketErrorDetail({ message: error instanceof Error ? error.message : "network error" });
+      scheduleReconnect(undefined, { signature: `open:${detail}`, description: `socket open failed (${detail})` });
     }
 
     return async () => {
