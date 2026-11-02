@@ -173,6 +173,8 @@ test("detectors catch common real-world secrets", () => {
 
 test("detectors avoid prose, code references, versions and placeholders", () => {
   const nearMisses = [
+    "KEY=$(VAR}",
+    "DB_PASSWORD=$(cat /run/secrets/db)",
     "const response = await client.get('/health')",
     "The API key is stored safely in the environment",
     "request_id=550e8400-e29b-41d4-a716-446655440000",

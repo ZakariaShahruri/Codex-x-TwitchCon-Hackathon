@@ -8,7 +8,8 @@ const URL_CREDENTIAL = /[A-Z][A-Z0-9+.-]*:\/\/[^/:@\s]+:([^/@\s]+)@/gi;
 const PROSE_START = /^(?:please|use|never|do|don't|should|must|keep|store|enter|type|your|the|this|that|is|are|can|remember|avoid|change|set|example)\b/i;
 const TYPE_NAMES = /^(?:string|number|boolean|bool|str|int|bytes|any|unknown|object|none|null|undefined|nil|true|false|optional\[.*\]|string\s*\|\s*undefined)$/i;
 const CODE_ROOT = /^(?:process\.env|import\.meta\.env|os\.environ|env|config|settings|req|request|this|self|form|user|args|options|opts|params|props|data|body|input|ctx)\./i;
-const PLACEHOLDER =/^(?:[*•●·]{3,}|x{3,}|<[^>]*>|\[[A-Z_ -]+\]|\$\{\{.*\}\}|\$\{.*\}|\$[A-Z_][A-Z0-9_]*|notset|changeme|redacted|hidden)$/i;
+/** `$(VAR}` is how Vision reads `${VAR}`; `$(cmd)` is shell command substitution, also not a literal secret. */
+const PLACEHOLDER =/^(?:[*•●·]{3,}|x{3,}|<[^>]*>|\[[A-Z_ -]+\]|\$\{\{.*\}\}|\$[{(].*[})]|\$[A-Z_][A-Z0-9_]*|notset|changeme|redacted|hidden)$/i;
 
 function isPasswordLabel(rawLabel: string): boolean {
   const label = normalizeLabel(rawLabel);
@@ -53,7 +54,7 @@ function assignmentRanges(line: OCRTextLine): TextRange[] {
       if (valueEnd < 0) continue;
     } else {
       const valueTail = line.text.slice(valueStart);
-      const delimiters = valueTail.startsWith("${") ? /[;,#\r\n]/u : /[;,#}\]\r\n]/u;
+      const delimiters = /^\$[{(]/.test(valueTail) ? /[;,#\r\n]/u : /[;,#}\]\r\n]/u;
       valueEnd = valueTail.search(delimiters);
       valueEnd = valueEnd < 0 ? line.text.length : valueStart + valueEnd;
     }
