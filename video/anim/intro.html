@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Intro</title>
+<!-- Twitchy intro: drops in, guards the delay, masks the key, then the wordmark. Rendered by video/build/capture.mjs. -->
+<style>
+  @font-face { font-family: Pixelify; src: url("../../web/dashboard/fonts/PixelifySans-latin-wght.woff2"); font-weight: 400 700; }
+  @font-face { font-family: Inter; src: url("../../web/dashboard/fonts/Inter-latin-wght.woff2"); font-weight: 100 900; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; font-family: Inter, sans-serif; color: #efeff1;
+    background: radial-gradient(1100px 700px at 50% 38%, #2d2140 0%, #17141f 60%, #0e0c14 100%); }
+  .abs { position: absolute; }
+  #stars i { position: absolute; width: 6px; height: 6px; background: #a385d9; }
+  .win { left: 330px; top: 210px; width: 1020px; height: 300px; border-radius: 18px; background: #15171d; box-shadow: 0 30px 80px #0009, 0 0 0 2px #ffffff12; overflow: hidden; }
+  .win .bar { height: 50px; background: #20232b; display: flex; align-items: center; gap: 10px; padding: 0 20px; color: #8b93a7; font-size: 22px; }
+  .win .bar b { width: 13px; height: 13px; border-radius: 50%; background: #4a4f5c; }
+  .code { padding: 26px 34px; font-family: Menlo, monospace; font-size: 32px; line-height: 1.75; white-space: pre; }
+  .mask { position: absolute; left: 26px; top: 190px; height: 54px; background: #000; border-radius: 6px; width: 0; box-shadow: 0 0 0 3px #ffdc68; }
+  .pipe { left: 330px; top: 640px; width: 1020px; height: 120px; }
+  .track { position: absolute; left: 0; right: 0; top: 52px; height: 18px; border-radius: 9px; background: #2b2b31; overflow: hidden; }
+  .track .fill { height: 100%; width: 0; background: linear-gradient(90deg, #9146ff, #ffcf5c); }
+  .pipe .lbl { position: absolute; top: 0; font-size: 26px; font-weight: 700; color: #b8b8c2; }
+  .pipe .live { right: 0; color: #ff4d5e; }
+  .frame { position: absolute; top: 18px; width: 120px; height: 82px; border-radius: 10px; background: #15171d; border: 3px solid #9146ff; box-shadow: 0 8px 20px #0008; }
+  .frame i { position: absolute; left: 12px; right: 12px; height: 8px; border-radius: 3px; background: #4a4f5c; }
+  .frame i.k { background: #f2c27b; }
+  .bubble { font-family: Pixelify; font-weight: 700; font-size: 64px; color: #17172c; background: #ffdc68; padding: 8px 28px; border-radius: 14px;
+    box-shadow: 0 8px 0 #b8902a; transform-origin: 0 100%; }
+  .bubble:after { content: ""; position: absolute; left: 30px; bottom: -18px; border: 14px solid transparent; border-top-color: #ffdc68; }
+  #mascot { width: 240px; height: 240px; transform-origin: 50% 100%; filter: drop-shadow(0 18px 18px #0008); }
+  .spark { position: absolute; width: 14px; height: 14px; background: #fff0a6; }
+  .word { left: 0; right: 0; top: 590px; text-align: center; font-family: Pixelify; font-weight: 700; font-size: 170px; line-height: 1; letter-spacing: .02em; }
+  .sub { left: 0; right: 0; top: 790px; text-align: center; font-size: 50px; font-weight: 650; color: #5fe3b5; }
+  .shadow { width: 200px; height: 26px; border-radius: 50%; background: #0007; }
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<div class="abs win" id="win"><div class="bar"><b></b><b></b><b></b><span>my-app — .env</span><span style="margin-left:auto;color:#ff4d5e">● LIVE</span></div>
+  <div class="code" id="code"></div><div class="mask" id="mask"></div></div>
+<div class="abs pipe" id="pipe"><span class="lbl">your screen</span><span class="lbl" style="left:390px">1 s stream delay</span><span class="lbl live">● on Twitch</span>
+  <div class="track"><div class="fill" id="fill"></div></div><div class="frame" id="frame"><i style="top:16px"></i><i class="k" id="fk" style="top:36px"></i><i style="top:56px;right:50px"></i></div></div>
+<div class="abs shadow" id="shadow"></div>
+<svg class="abs" id="mascot" viewBox="0 0 32 32" shape-rendering="crispEdges"><use id="pose" href="#armed"/></svg>
+<div class="abs bubble" id="bubble">BLOCKED!</div>
+<div id="sparks"></div>
+<div class="abs word" id="word"></div>
+<div class="abs sub" id="sub">Stream Shield</div>
+<script src="../renders/stage-data.js"></script>
+<script>
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const easeOut = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeInOut = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const backOut = (x) => { x = clamp(x); const c = 1.9; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+const $ = (id) => document.getElementById(id);
+const KEY = "OPENAI_API_KEY=" + window.STAGE.apiKey.slice(0, 30) + "…";
+
+// a deterministic pixel starfield
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const stars = Array.from({ length: 70 }, () => { const s = document.createElement("i"); s.style.left = `${rnd() * 1920}px`; s.style.top = `${rnd() * 1080}px`; $("stars").appendChild(s); return [s, rnd() * 6]; });
+const sparks = Array.from({ length: 14 }, (_, i) => { const s = document.createElement("i"); s.className = "spark"; $("sparks").appendChild(s); return [s, (i / 14) * Math.PI * 2, 120 + rnd() * 110]; });
+const WORD = "Twitchy";
+
+function place(el, x, y, extra = "") { el.style.left = `${x}px`; el.style.top = `${y}px`; el.style.transform = extra; }
+
+window.DURATION = 13.5;
+window.render = (t) => {
+  for (const [s, ph] of stars) s.style.opacity = (.25 + .55 * Math.abs(Math.sin(t * 1.3 + ph))).toFixed(2);
+  // window + key typing
+  const typed = Math.floor(span(t, 1.3, 2.6) * KEY.length);
+  $("code").textContent = `# local secrets\nPORT=3000\n${KEY.slice(0, typed)}${Math.floor(t * 2.5) % 2 ? "▍" : " "}`;
+  $("mask").style.width = `${easeOut(span(t, 6.9, 7.25)) * 968}px`;
+  $("mask").style.opacity = t > 6.9 ? 1 : 0;
+  const out = easeInOut(span(t, 9.7, 10.4));
+  $("win").style.opacity = 1 - out; $("pipe").style.opacity = 1 - out;
+  $("win").style.transform = `translateY(${-out * 60}px)`; $("pipe").style.transform = `translateY(${out * 60}px)`;
+  // the delay pipe: a frame travels from "your screen" to "on Twitch" over the 1 s delay (shown slowed down)
+  const travel = easeInOut(span(t, 3.9, 8.7));
+  $("fill").style.width = `${travel * 100}%`;
+  $("frame").style.left = `${travel * 900}px`;
+  $("fk").style.background = t > 7.0 ? "#000" : "#f2c27b";
+  $("fk").style.boxShadow = t > 7.0 ? "0 0 0 2px #ffdc68" : "none";
+  $("frame").style.borderColor = t > 8.6 ? "#5fe3b5" : "#9146ff";
+
+  // Twitchy: drop + squash, hop up to the key with the shield, then centre stage
+  let x = 1430, y = 250, sx = 1, sy = 1, pose = "armed", size = 240;
+  if (t < .9) { const k = span(t, .2, .75); y = lerp(-320, 250, k * k); sy = 1.12; sx = .9; }
+  else if (t < 1.25) { const k = span(t, .9, 1.25); const sq = Math.sin(k * Math.PI); sy = 1 - .3 * sq; sx = 1 + .3 * sq; }
+  if (t > 2.2 && t < 2.34) pose = "off";                       // blink
+  if (t > 5.0 && t < 5.12) pose = "off";
+  if (t >= 6.3 && t < 9.7) {                                   // leap onto the secret line with the shield
+    const k = span(t, 6.3, 6.95); x = lerp(1430, 1110, k); y = lerp(250, 170, k) - Math.sin(k * Math.PI) * 170; pose = "shield";
+    if (t > 6.95 && t < 7.2) { const q = Math.sin(span(t, 6.95, 7.2) * Math.PI); sy = 1 - .22 * q; sx = 1 + .22 * q; }
+  }
+  if (t >= 9.7) {                                              // centre stage, bigger, happy bounce
+    const k = easeInOut(span(t, 9.7, 10.5)); x = lerp(1110, 960 - 160, k); y = lerp(170, 230, k) - Math.sin(k * Math.PI) * 160; size = lerp(240, 320, k);
+    pose = t > 10.5 ? "armed" : "shield";
+    if (t > 10.5) { const b = Math.abs(Math.sin((t - 10.5) * 4.2)); y = 230 - b * 26; sy = 1 + (1 - b) * -.06; sx = 1 + (1 - b) * .06; }
+    if (t > 12.1 && t < 12.24) pose = "off";
+  }
+  const m = $("mascot"); m.style.width = m.style.height = `${size}px`;
+  place(m, x, y, `scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`);
+  $("pose").setAttribute("href", `#${pose}`);
+  m.style.opacity = t < .2 ? 0 : 1;
+  const sh = $("shadow"); sh.style.width = `${size * .8}px`; place(sh, x + size * .1, (t >= 9.7 ? 230 : 250) + size - 12); sh.style.opacity = t < .5 ? 0 : (t >= 6.3 && t < 9.7 ? 0 : .8);
+  // BLOCKED! bubble + sparks when the mask lands
+  const b = backOut(span(t, 7.05, 7.45)) * (1 - span(t, 9.2, 9.6));
+  place($("bubble"), 1270, 70, `scale(${b.toFixed(3)}) rotate(-4deg)`);
+  const burst = span(t, 7.0, 7.8);
+  for (const [s, a, r] of sparks) { const d = easeOut(burst) * r; s.style.left = `${1230 + Math.cos(a) * d}px`; s.style.top = `${300 + Math.sin(a) * d}px`; s.style.opacity = burst > 0 && burst < 1 ? 1 - burst : 0; }
+  // wordmark types in, then the subtitle
+  const letters = Math.floor(span(t, 10.6, 11.6) * WORD.length + .001);
+  $("word").textContent = WORD.slice(0, letters);
+  $("sub").style.opacity = span(t, 11.7, 12.1);
+  $("sub").style.transform = `translateY(${(1 - easeOut(span(t, 11.7, 12.1))) * 30}px)`;
+  document.body.style.opacity = Math.min(span(t, 0, .3) + .0001, 1 - span(t, 13.1, 13.5));
+};
+
+fetch("../../web/overlay/assets/twitchy.svg").then((r) => r.text()).then((svg) => {
+  document.body.insertAdjacentHTML("afterbegin", svg.replace("<svg ", '<svg style="display:none" '));
+  return document.fonts.ready;
+}).then(() => { window.READY = true; });
+</script>
+</body>
+</html>

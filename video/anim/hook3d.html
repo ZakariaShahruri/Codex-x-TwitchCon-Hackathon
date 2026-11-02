@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hook</title>
+<!-- 3D hook: a streamer opens their .env on stream. Rendered frame by frame by video/build/capture.mjs (window.render(t)). -->
+<style>
+  @font-face { font-family: Pixelify; src: url("../../web/dashboard/fonts/PixelifySans-latin-wght.woff2"); font-weight: 400 700; }
+  @font-face { font-family: Inter; src: url("../../web/dashboard/fonts/Inter-latin-wght.woff2"); font-weight: 100 900; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; font-family: Inter, sans-serif; color: #efeff1; }
+  canvas { position: absolute; inset: 0; }
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+  .live { position: absolute; top: 36px; left: 40px; display: flex; gap: 12px; align-items: center; font-weight: 750; font-size: 28px; }
+  .live b { background: #e91916; color: #fff; padding: 4px 14px; border-radius: 6px; letter-spacing: .04em; }
+  .live span { background: rgba(0,0,0,.55); padding: 4px 14px; border-radius: 6px; }
+  .chat { position: absolute; top: 110px; right: 36px; width: 470px; height: 760px; background: rgba(14,14,18,.78); border-radius: 18px;
+    border: 1px solid #ffffff1a; padding: 18px 20px; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; overflow: hidden; }
+  .chat h4 { position: absolute; top: 14px; left: 20px; font-size: 18px; color: #9a9aa6; letter-spacing: .08em; font-weight: 700; }
+  .msg { font-size: 25px; line-height: 1.3; }
+  .msg i { font-style: normal; font-weight: 700; }
+  .msg.hot { background: rgba(233,25,22,.18); border-left: 4px solid #ff4d5e; padding: 4px 10px; border-radius: 6px; }
+  .stamp { position: absolute; left: 36%; top: 74%; transform: translate(-50%,-50%) rotate(-7deg) scale(var(--s,1)); opacity: var(--o,0);
+    border: 12px solid #ff3355; color: #ff3355; padding: 14px 60px 20px; border-radius: 24px; background: rgba(25,0,8,.6); text-align: center;
+    box-shadow: 0 0 120px #ff335577; }
+  .stamp div { font-family: Pixelify; font-size: 130px; font-weight: 700; line-height: 1; }
+  .stamp small { display: block; font-size: 40px; font-weight: 800; margin-top: 6px; }
+  .flash { position: absolute; inset: 0; background: #ff2244; mix-blend-mode: screen; opacity: 0; }
+  .scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.06) 0 2px, transparent 2px 5px); opacity: 0; }
+  .card { position: absolute; padding: 26px 32px; border-radius: 22px; background: #1d1d24; border: 2px solid #3d3d44; box-shadow: 0 30px 80px #000c;
+    opacity: var(--o,0); transform: translate(var(--x,0px), var(--y,0px)) rotate(var(--r,0deg)); }
+  .card .k { font-size: 24px; color: #9a9aa6; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .card .v { font-size: 62px; font-weight: 800; margin-top: 4px; }
+  .card .v.red { color: #ff4d5e; }
+  .phone { position: absolute; left: 50%; top: 50%; width: 760px; transform: translate(-50%, calc(-50% + var(--y,0px))); opacity: var(--o,0);
+    background: rgba(245,245,250,.97); color: #16161c; border-radius: 34px; padding: 30px 36px; box-shadow: 0 40px 120px #000; }
+  .phone .head { display: flex; justify-content: space-between; font-size: 22px; color: #6a6a78; font-weight: 700; }
+  .phone h3 { font-size: 40px; margin: 14px 0 8px; }
+  .phone p { font-size: 28px; line-height: 1.35; color: #33333d; }
+  .phone .amt { font-size: 74px; font-weight: 850; color: #e5192e; margin-top: 10px; }
+  .phone svg { width: 100%; height: 110px; margin-top: 12px; }
+  .black { position: absolute; inset: 0; background: #000; opacity: 1; }
+</style>
+</head>
+<body>
+<canvas id="gl" width="1920" height="1080"></canvas>
+<div class="layer" id="ui">
+  <div class="live"><b>LIVE</b><span id="viewers">1,204 viewers</span></div>
+  <div class="chat" id="chat"><h4>STREAM CHAT</h4></div>
+</div>
+<div class="layer scan" id="scan"></div>
+<div class="layer flash" id="flash"></div>
+<div class="stamp" id="stamp"><div>LEAKED</div><small>0.8 s on air · already clipped</small></div>
+<div class="card" id="vod" style="left:150px;top:200px"><div class="k">VOD</div><div class="v">Saved forever</div></div>
+<div class="card" id="clips" style="left:640px;top:600px"><div class="k">Clips created</div><div class="v red" id="clipcount">0</div></div>
+<div class="card" id="shot" style="left:1180px;top:230px"><div class="k">screenshot_2026.png</div><div class="v">📸 posted</div></div>
+<div class="phone" id="phone">
+  <div class="head"><span>⚠ Billing alert</span><span>now</span></div>
+  <h3>Unusual usage on your API key</h3>
+  <p>3,912 requests in the last hour from 41 unknown IPs.</p>
+  <div class="amt" id="amt">$0.00</div>
+  <svg viewBox="0 0 700 110" preserveAspectRatio="none"><path id="spark" fill="none" stroke="#e5192e" stroke-width="6" d=""/></svg>
+</div>
+<div class="black" id="black"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="../renders/stage-data.js"></script>
+<script>
+const KEY = "OPENAI_API_KEY=" + window.STAGE.apiKey;
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const ease = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ---------- scene ----------
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("gl"), antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(1920, 1080, false);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06050b);
+scene.fog = new THREE.Fog(0x06050b, 5, 12);
+const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.05, 50);
+const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: .75, metalness: .05, ...extra });
+const glow = (color, intensity = 2.2) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity });
+const add = (geo, m, x, y, z, parent = scene) => { const mesh = new THREE.Mesh(geo, m); mesh.position.set(x, y, z); parent.add(mesh); return mesh; };
+
+scene.add(new THREE.HemisphereLight(0x6f5cff, 0x0a0610, .45));
+const pink = new THREE.PointLight(0xff3fa4, 2.2, 5); pink.position.set(-2.1, 2.2, -0.6); scene.add(pink);
+const cyan = new THREE.PointLight(0x2fe6ff, 1.8, 5); cyan.position.set(2.2, 2.0, 0.2); scene.add(cyan);
+const screenLight = new THREE.PointLight(0xbcd2ff, 1.4, 3); screenLight.position.set(0, 1.25, 0.25); scene.add(screenLight);
+const key = new THREE.DirectionalLight(0xffffff, .3); key.position.set(1.5, 3, 3); scene.add(key);
+
+// room
+add(new THREE.PlaneGeometry(12, 12), mat(0x0f0c16), 0, 0, 0).rotation.x = -Math.PI / 2;
+add(new THREE.PlaneGeometry(12, 5), mat(0x16111f), 0, 2.5, -1.3);
+const side = add(new THREE.PlaneGeometry(8, 5), mat(0x120e1b), -2.6, 2.5, 1.5); side.rotation.y = Math.PI / 2;
+add(new THREE.BoxGeometry(5.2, .04, .04), glow(0xff3fa4), 0, 3.1, -1.27);           // neon strip
+add(new THREE.BoxGeometry(.04, 3.0, .04), glow(0x2fe6ff), -2.57, 1.6, -1.2);
+const sign = add(new THREE.TorusGeometry(.32, .035, 12, 48), glow(0xff3fa4, 3), -1.3, 2.25, -1.25);  // neon ring sign
+add(new THREE.TorusGeometry(.16, .03, 12, 32), glow(0x2fe6ff, 3), -1.3, 2.25, -1.24);
+for (let i = 0; i < 3; i++) { // shelves with little glowing collectibles
+  add(new THREE.BoxGeometry(1.1, .04, .25), mat(0x3a2f55), 1.6, 1.6 + i * .45, -1.15);
+  add(new THREE.BoxGeometry(.14, .2, .14), glow([0x5fe3b5, 0xffcf5c, 0xa385d9][i], 1.2), 1.3 + i * .2, 1.72 + i * .45, -1.15);
+}
+// desk, monitor, keyboard
+add(new THREE.BoxGeometry(2.0, .06, .85), mat(0x2b2440), 0, .76, 0);
+for (const x of [-.9, .9]) add(new THREE.BoxGeometry(.06, .76, .7), mat(0x221c33), x, .38, 0);
+add(new THREE.BoxGeometry(.08, .32, .08), mat(0x111018), 0, .95, -.25);
+add(new THREE.BoxGeometry(1.24, .74, .05), mat(0x0d0c12), 0, 1.25, -.27);
+const screenCanvas = document.createElement("canvas"); screenCanvas.width = 1280; screenCanvas.height = 740;
+const sctx = screenCanvas.getContext("2d");
+const screenTex = new THREE.CanvasTexture(screenCanvas); screenTex.anisotropy = 8;
+const screen = add(new THREE.PlaneGeometry(1.18, .68), new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }), 0, 1.25, -.243);
+const kb = add(new THREE.BoxGeometry(.62, .03, .2), mat(0x15131d), -.02, .805, .2);
+const kbGlow = add(new THREE.BoxGeometry(.6, .006, .18), glow(0xa385d9, 1.4), -.02, .822, .2);
+add(new THREE.BoxGeometry(.1, .025, .14), mat(0x15131d), .45, .8, .22);           // mouse
+add(new THREE.CylinderGeometry(.05, .06, .14, 20), mat(0xffcf5c), -.75, .86, .1);   // mug
+// ring light + mic arm
+const ring = add(new THREE.TorusGeometry(.3, .03, 12, 48), glow(0xffffff, 1.6), 1.3, 1.6, -.75); ring.rotation.y = -.4;
+add(new THREE.CylinderGeometry(.012, .012, .8, 8), mat(0x111018), 1.3, 1.2, -.75);
+// streamer
+const me = new THREE.Group(); me.position.set(0, 0, .78); scene.add(me);
+add(new THREE.BoxGeometry(.62, .7, .08), mat(0x3b2f66), 0, 1.12, .28, me);            // chair back
+add(new THREE.CylinderGeometry(.3, .3, .07, 24), mat(0x2b2440), 0, .5, .05, me);       // seat
+const torso = add(new THREE.CylinderGeometry(.2, .25, .58, 20), mat(0x9146ff), 0, .86, .05, me);   // hoodie
+const head = new THREE.Group(); head.position.set(0, 1.36, .02); me.add(head);
+add(new THREE.SphereGeometry(.19, 32, 24), mat(0xf2c6a0), 0, 0, 0, head);
+const hair = add(new THREE.SphereGeometry(.2, 32, 24, 0, Math.PI * 2, 0, Math.PI / 2.1), mat(0x2a1d3a), 0, .03, .015, head); hair.rotation.x = .25;
+const band = add(new THREE.TorusGeometry(.205, .022, 10, 40, Math.PI), mat(0x15131d), 0, .02, 0, head); band.rotation.z = 0;
+for (const x of [-.2, .2]) add(new THREE.CylinderGeometry(.07, .07, .05, 20), glow(0x2fe6ff, 1.0), x, -.02, 0, head).rotation.z = Math.PI / 2;
+const mic = add(new THREE.CylinderGeometry(.01, .01, .2, 8), mat(0x15131d), -.12, -.1, -.12, head); mic.rotation.set(1.2, 0, .5);
+const eyes = [-.065, .065].map((x) => add(new THREE.SphereGeometry(.026, 16, 12), mat(0x1a1020), x, .02, -.175, head));
+const mouth = add(new THREE.TorusGeometry(.03, .01, 8, 20), mat(0x6b2e3a), 0, -.07, -.18, head);
+const arms = [-1, 1].map((s) => { const a = add(new THREE.CylinderGeometry(.05, .05, .5, 12), mat(0x9146ff), s * .2, .9, -.15, me); a.rotation.set(-1.2, 0, s * -.25); return a; });
+
+// ---------- monitor screen (editor) ----------
+function drawScreen(t) {
+  const c = sctx; c.fillStyle = "#15171d"; c.fillRect(0, 0, 1280, 740);
+  c.fillStyle = "#20232b"; c.fillRect(0, 0, 1280, 56); c.fillStyle = "#8b93a7"; c.font = "26px Menlo, monospace";
+  const envOpen = t > 5.4;
+  c.fillText(envOpen ? "my-app — .env" : "my-app — server.ts", 24, 37);
+  c.fillStyle = "#e85a6b"; c.fillText("● BUILD FAILED", 1010, 37);
+  c.font = "34px Menlo, monospace";
+  const lines = envOpen
+    ? [["# local secrets", "#8b93a7"], ["PORT=3000", "#7fb3ff"], [KEY, "#f2c27b"], ["DB_PASSWORD=" + window.STAGE.password.split("=")[1], "#efeff1"]]
+    : [["import { serve } from './app'", "#c7a6ff"], ["", ""], ["serve({ port: env.PORT })", "#efeff1"], ["// TODO fix the build", "#8b93a7"]];
+  const shown = envOpen ? Math.floor(span(t, 5.4, 6.7) * lines.length + .5) : lines.length;
+  lines.slice(0, shown).forEach(([text, color], i) => {
+    c.fillStyle = "#5c6274"; c.fillText(String(i + 1).padStart(2), 22, 120 + i * 62);
+    c.fillStyle = color; c.fillText(text.length > 52 ? text.slice(0, 52) : text, 90, 120 + i * 62);
+  });
+  if (envOpen && shown >= 3 && t > 9.3 && t < 12.6) { // the secret line pulses red once they realise
+    c.strokeStyle = `rgba(255,51,85,${.6 + .4 * Math.sin(t * 18)})`; c.lineWidth = 5; c.strokeRect(78, 120 + 2 * 62 - 42, 1180, 58);
+  }
+  const caret = (Math.floor(t * 2) % 2 === 0) ? 1 : 0;
+  if (caret) { c.fillStyle = "#efeff1"; c.fillRect(90 + 14 * 20, 120 + Math.min(shown, 3) * 62 - 32, 3, 40); }
+  screenTex.needsUpdate = true;
+}
+
+// ---------- chat ----------
+const CHAT = [
+  [1.2, "pixel_pat", "#5fe3b5", "lets gooo"], [2.3, "noodlecat", "#ffcf5c", "build broke again lol"], [3.4, "kiwi_kart", "#a385d9", "F"],
+  [4.6, "lurker_99", "#7fb3ff", "just use console.log"], [6.9, "byte_me", "#ff8aa0", "bro is that your API key 👀", 1], [7.4, "noodlecat", "#ffcf5c", "KEY ON STREAM", 1],
+  [7.8, "anon_4512", "#9a9aa6", "copied ty", 1], [8.2, "pixel_pat", "#5fe3b5", "💀💀💀"], [8.6, "grabby_", "#ff8aa0", "thx for the free credits", 1],
+  [9.7, "kiwi_kart", "#a385d9", "CLIP IT"], [9.9, "mod_moss", "#5fe3b5", "@streamer your .env!!"], [10.1, "lurker_99", "#7fb3ff", "LMAO"],
+  [10.3, "anon_7781", "#9a9aa6", "clipped 📎"], [10.5, "noodlecat", "#ffcf5c", "rip wallet"], [10.7, "byte_me", "#ff8aa0", "screenshotted"],
+  [10.9, "grabby_", "#ff8aa0", "already in my curl 😈", 1], [11.1, "pixel_pat", "#5fe3b5", "nooo"],
+];
+const chat = document.getElementById("chat");
+const rows = CHAT.map(([at, name, color, text, hot]) => {
+  const row = document.createElement("div"); row.className = "msg" + (hot ? " hot" : "");
+  row.innerHTML = `<i style="color:${color}">${name}</i>: ${text}`; row.style.display = "none"; chat.appendChild(row); return [at, row];
+});
+
+// ---------- camera path ----------
+const SHOTS = [
+  { at: 0.0, pos: v3(1.9, 1.95, 3.1), look: v3(0, 1.15, -.2) },
+  { at: 5.0, pos: v3(.62, 1.52, 1.25), look: v3(-.05, 1.22, -.25) },
+  { at: 7.0, pos: v3(.42, 1.78, .78), look: v3(-.08, 1.24, -.27) },
+  { at: 8.4, pos: v3(-.02, 1.26, .36), look: v3(-.1, 1.25, -.27) },
+];
+function cameraAt(t) {
+  if (t >= 9.6 && t < 12.9) { // "webcam" shot of the streamer's face
+    const k = ease(span(t, 9.6, 12.9));
+    camera.position.set(lerp(.05, .02, k), 1.42, lerp(-.02, .1, k)); camera.lookAt(-.14, 1.34, .8); camera.fov = 46; camera.updateProjectionMatrix(); return;
+  }
+  if (t >= 12.9) { const k = ease(span(t, 12.9, 27)); camera.position.set(lerp(2.6, 3.2, k), lerp(2.2, 2.6, k), lerp(3.6, 4.4, k)); camera.lookAt(0, 1.1, 0); camera.fov = 42; camera.updateProjectionMatrix(); return; }
+  let i = 0;
+  while (i < SHOTS.length - 2 && t >= SHOTS[i + 1].at) i++;
+  const a = SHOTS[i], b = SHOTS[i + 1];
+  const k = ease(span(t, a.at, b.at));
+  camera.position.lerpVectors(a.pos, b.pos, k);
+  camera.lookAt(new THREE.Vector3().lerpVectors(a.look, b.look, k));
+  camera.fov = 42; camera.updateProjectionMatrix();
+}
+
+// ---------- overlays ----------
+const $ = (id) => document.getElementById(id);
+const setVars = (el, vars) => { for (const [k, v] of Object.entries(vars)) el.style.setProperty(k, v); };
+function sparkPath(k) {
+  const pts = [];
+  for (let i = 0; i <= 40; i++) { const x = i / 40; const y = x < .55 ? 95 - x * 20 : 95 - 11 - Math.pow((x - .55) / .45, 2) * 85; if (x <= k) pts.push(`${(x * 700).toFixed(1)},${y.toFixed(1)}`); }
+  return pts.length ? "M" + pts.join(" L") : "";
+}
+
+window.DURATION = 27.0;
+window.render = async (t) => {
+  // streamer motion: typing, then freezing and turning to the camera
+  const typing = t < 9.3 ? Math.sin(t * 22) * .012 : 0;
+  arms.forEach((a, i) => { a.position.y = .9 + (i ? typing : -typing); });
+  head.rotation.y = t < 9.3 ? Math.sin(t * .8) * .08 : lerp(0, .25, ease(span(t, 9.3, 10.0)));
+  head.rotation.x = t < 9.3 ? .12 : lerp(.12, -.05, ease(span(t, 9.3, 10.0)));
+  const shock = ease(span(t, 9.9, 10.3));
+  eyes.forEach((e) => e.scale.setScalar(1 + shock * .45));
+  mouth.scale.setScalar(1 + shock * 1.4);
+  torso.position.y = .86 + Math.sin(t * 2.2) * .005;
+  sign.material.emissiveIntensity = 2.6 + Math.sin(t * 5) * .4;
+  kbGlow.material.color.setHSL((t * .15) % 1, .7, .6); kbGlow.material.emissive.copy(kbGlow.material.color);
+  ring.material.emissiveIntensity = t > 9.6 && t < 12.9 ? 2.4 : 1.6;
+  pink.intensity = 2.4 + (t > 9.6 && t < 10.4 ? Math.sin(t * 60) * 1.5 : 0);
+  drawScreen(t);
+  cameraAt(t);
+  renderer.render(scene, camera);
+
+  // stream UI and chat
+  $("viewers").textContent = (1204 + Math.floor(t * 9) + (t > 9.6 ? Math.floor((t - 9.6) * 160) : 0)).toLocaleString("en-US") + " viewers";
+  let visible = 0;
+  for (const [at, row] of rows) { const on = t >= at; row.style.display = on ? "block" : "none"; if (on) visible++; }
+  $("ui").style.opacity = t < 12.9 ? 1 : 1 - span(t, 12.9, 13.6);
+  // glitch + stamp
+  const glitch = t > 9.55 && t < 10.35;
+  const canvas = document.getElementById("gl");
+  canvas.style.transform = glitch ? `translate(${Math.round(Math.sin(t * 97) * 18)}px, ${Math.round(Math.cos(t * 71) * 6)}px)` : "none";
+  canvas.style.filter = t >= 12.9 ? `brightness(${lerp(1, .32, span(t, 12.9, 13.8))}) blur(${lerp(0, 4, span(t, 12.9, 13.8))}px) saturate(.7)`
+    : glitch ? `hue-rotate(${Math.round(Math.sin(t * 40) * 60)}deg) contrast(1.4)` : "none";
+  $("flash").style.opacity = glitch ? (.35 + .25 * Math.sin(t * 80)) : 0;
+  $("scan").style.opacity = t > 9.55 && t < 12.9 ? .8 : 0;
+  const st = span(t, 9.85, 10.1);
+  setVars($("stamp"), { "--o": t > 9.85 && t < 13.1 ? 1 : 0, "--s": (lerp(2.2, 1, ease(st))).toFixed(3) });
+  // aftermath cards
+  const card = (id, at, dx, dy, r) => { const k = ease(span(t, at, at + .45)); setVars($(id), { "--o": k * (1 - span(t, 23.3, 23.7)), "--x": `${(1 - k) * dx}px`, "--y": `${(1 - k) * dy}px`, "--r": `${r}deg` }); };
+  card("vod", 16.6, -260, 0, -3); card("clips", 18.4, 0, 220, 2); card("shot", 20.2, 260, 0, 4);
+  $("clipcount").textContent = String(Math.floor(lerp(0, 14, span(t, 18.5, 21.5))));
+  const p = ease(span(t, 23.6, 24.1));
+  setVars($("phone"), { "--o": p * (1 - span(t, 26.4, 26.9)), "--y": `${(1 - p) * 300}px` });
+  $("amt").textContent = "$" + lerp(0, 2417.83, ease(span(t, 24.0, 26.2))).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  $("spark").setAttribute("d", sparkPath(span(t, 24.0, 26.2)));
+  $("black").style.opacity = Math.max(1 - span(t, 0, .6), span(t, 26.5, 27));
+};
+document.fonts.ready.then(() => { window.READY = true; });
+</script>
+</body>
+</html>

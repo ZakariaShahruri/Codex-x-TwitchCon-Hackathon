@@ -1,5 +1,6 @@
 // Narration with OpenAI TTS: one WAV per script line, so captions can follow each line exactly.
 // Usage: tsx video/build/tts.mts <voice> [sceneId...]   → video/audio/<voice>/<scene>-<n>.wav
+// A scene can set its own voice and instructions (the hook's streamer and narrator); its files still land in <voice>/.
 // Only the public script text is sent. The key is read from .env and never printed.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
@@ -9,7 +10,7 @@ const apiKey = env.match(/^OPENAI_API_KEY=(.+)$/m)?.[1]?.trim().replace(/^["']|[
 if (!apiKey) throw new Error("OPENAI_API_KEY missing from .env");
 
 const script = JSON.parse(await readFile(new URL("video/script.json", root), "utf8")) as {
-  voiceInstructions: string; scenes: Array<{ id: string; lines: string[] }>;
+  voiceInstructions: string; scenes: Array<{ id: string; voice?: string; instructions?: string; lines: string[] }>;
 };
 const [voice = "cedar", ...only] = process.argv.slice(2);
 const folder = new URL(`video/audio/${voice}/`, root);
@@ -20,7 +21,7 @@ for (const scene of script.scenes.filter((item) => !only.length || only.includes
     const response = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: "gpt-4o-mini-tts", voice, input, instructions: script.voiceInstructions, response_format: "wav" }),
+      body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: scene.voice ?? voice, input, instructions: scene.instructions ?? script.voiceInstructions, response_format: "wav" }),
     });
     if (!response.ok) throw new Error(`TTS failed for ${scene.id}-${index} (HTTP ${response.status})`);
     await writeFile(new URL(`${scene.id}-${index}.wav`, folder), Buffer.from(await response.arrayBuffer()));
