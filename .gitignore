@@ -4,3 +4,8 @@ tools/ocr-vision/.build/
 .env
 twitchy.private.json
 .DS_Store
+
+# Demo video: raw footage, audio and renders stay local
+video/footage/
+video/audio/
+video/renders/

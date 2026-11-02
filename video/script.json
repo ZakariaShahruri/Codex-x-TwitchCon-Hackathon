@@ -1,0 +1,46 @@
+{
+  "voiceInstructions": "Friendly, confident indie developer showing a project to a few judges. Warm and upbeat, natural pace, short pauses between sentences. Not salesy, not a movie trailer.",
+  "scenes": [
+    { "id": "hook", "lines": [
+      "This key was on stream for less than a second.",
+      "That's enough. It's in the VOD, the clips, someone's screenshot. You can't take it back.",
+      "Same moment, with Twitchy."
+    ] },
+    { "id": "intro", "lines": [
+      "Twitchy reads your screen before your viewers do.",
+      "It sits inside a one-second stream delay, and covers secrets before that frame ever goes out."
+    ] },
+    { "id": "montage", "lines": [
+      "Here it is, live on Twitch.",
+      "API keys. Passwords. An email.",
+      "Your home address, from a private watchlist that never leaves your laptop.",
+      "A QR login code. A card number, checked, so order numbers stay visible. A seed phrase. Your public IP.",
+      "Each one covered before it airs."
+    ] },
+    { "id": "rule", "lines": [
+      "Some things only you know about. So tell Twitchy in plain English.",
+      "AI writes the rule once, Twitchy tests it, and from then on it runs on your Mac, every frame.",
+      "The AI never sees your stream."
+    ] },
+    { "id": "gauntlet", "lines": [
+      "We didn't want to just say it works, so we built a test that tries to break it.",
+      "Thirty-seven fake secrets, fourteen lookalikes.",
+      "Thirty-seven blocked, zero false alarms, and every mask up in about a third of the delay."
+    ] },
+    { "id": "chat", "lines": [
+      "Chat has your back too.",
+      "Anyone can ask Twitchy how many saves it's made.",
+      "You or a mod type panic, and the whole stream goes dark. Unblur brings it back."
+    ] },
+    { "id": "codex", "lines": [
+      "Under the hood: OBS frames, Apple's on-device text recognition, and fast checks like Luhn and the BIP39 checksum.",
+      "No frame leaves your machine, and there's no AI bill.",
+      "We built it with Codex. Two developers, two Codex threads, one per track, talking only through a shared event contract.",
+      "AGENTS.md set the rules: stay in your folders, test everything, commit small.",
+      "A hundred commits, with CI on every push."
+    ] },
+    { "id": "outro", "lines": [
+      "Twitchy catches leaks before your viewers ever see them."
+    ] }
+  ]
+}
