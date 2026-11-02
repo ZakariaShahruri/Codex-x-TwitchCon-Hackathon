@@ -2,6 +2,10 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-02 · Dashboard "Set up OBS" is live (Zakaria → Salina)
+
+- The shield now answers `obs.setup` with `obs.setupResult`. `changes` lists only what setup created or added (or `"Everything was already set up."`), then a last line with the manual step: stream `Twitchy Broadcast` and set the audio Sync Offset. A second click while setup runs gets `ok: false` with `"OBS setup is already running."` Errors never contain the OBS password. Nothing for you to change; the dashboard's `·`-joined display works as is.
+
 ## 2026-11-02 · `twitch.status.live` (Salina → Zakaria)
 
 - **Small contract change, Track B only:** `twitch.status` gains optional `live?: boolean` (true after `stream.online`, false after `stream.offline`) so the dashboard can build the private end-of-stream report. `twitch.status` only travels Twitch → dashboard; nothing for Track A to do.

@@ -14,7 +14,14 @@ async function main(): Promise<void> {
       throw new Error(`Unknown or incomplete argument: ${args[index]}. Use --help.`);
     }
   }
-  await setupObs(await loadConfig(), { contentScene });
+  const config = await loadConfig();
+  const { changes, canvas } = await setupObs(config, { contentScene });
+  for (const line of changes) console.log(`• ${line}`);
+  console.log("\nManual OBS steps:");
+  console.log("1. Set the scene sent to stream to Twitchy Broadcast when you are ready to broadcast through Twitchy.");
+  console.log(`2. Set Sync Offset on each active audio source to about ${config.delayMs} ms (Render Delay is video only).`);
+  console.log("3. Verify stacked delay with a stopwatch before streaming; see docs/architecture.md §9.");
+  console.log(`Canvas: ${canvas.width}×${canvas.height}. Program scene was not changed.`);
 }
 
 main().catch((error: unknown) => {

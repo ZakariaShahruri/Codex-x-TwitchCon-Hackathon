@@ -9,7 +9,7 @@ Every command in one place. Run them from the repo root.
 | `npm install` | Install dependencies |
 | `cp .env.example .env` | Create your local secrets file, then fill in OBS and Twitch values |
 | `npm run ocr:build` | Build the Apple Vision OCR helper (macOS). `npm test`, `npm run gauntlet` and `npm run bench:ocr` build it for you |
-| `npm run obs:setup` | Create the Twitchy scenes, delay filters and masks in OBS. Add `-- --content-scene "My Scene"` to use an existing scene as the content |
+| `npm run obs:setup` | Create the Twitchy scenes, delay filters and masks in OBS. Add `-- --content-scene "My Scene"` to use an existing scene as the content. The dashboard's "Set up OBS" button runs the same setup |
 
 OBS needs obs-websocket enabled (Tools → WebSocket Server Settings). Its URL and password go in `.env` as `OBS_WS_URL` and `OBS_WS_PASSWORD`.
 

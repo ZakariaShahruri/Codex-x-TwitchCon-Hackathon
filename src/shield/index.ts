@@ -4,6 +4,7 @@ import { createInterface, type Interface as ReadlineInterface } from "node:readl
 import type { StartTrack } from "../shared/track.js";
 import { redacted, type EventMap } from "../shared/events.js";
 import { connectContentCapture, type CaptureFrame, type ContentCaptureHandle } from "./capture-loop.js";
+import { listenForObsSetup } from "./obs-setup-handler.js";
 import { ShieldStateMachine } from "./shield-state.js";
 import { createWatchlistService } from "./watchlist/service.js";
 
@@ -27,6 +28,7 @@ export async function startShield(
   privateFile = "twitchy.private.json",
 ): ReturnType<StartTrack> {
   const watchlist = await createWatchlistService(bus, privateFile);
+  const stopObsSetup = listenForObsSetup(bus, config);
   const state = new ShieldStateMachine(config.armOnStart, (snapshot) => {
     bus.emit("shield.state", snapshot);
     console.log(`Shield state: ${snapshot.status}${snapshot.reason ? ` (${snapshot.reason})` : ""}`);
@@ -235,6 +237,7 @@ export async function startShield(
     if (stopping) return;
     stopping = true;
     bus.off("shield.command", commandListener);
+    stopObsSetup();
     await watchlist.stop();
     if (retryTimer) clearTimeout(retryTimer);
     clearInterval(metricsTimer);

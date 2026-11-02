@@ -38,8 +38,14 @@ export function broadcastOrder(maskCount: number): string[] {
   return [SCENES.raw, ...Array.from({ length: maskCount }, (_, i) => `${MASK_PREFIX}${String(i + 1).padStart(2, "0")}`), OVERLAY];
 }
 
+export interface ObsSetupReport {
+  /** One readable line per source, scene or filter found, created or configured. */
+  changes: string[];
+  canvas: { width: number; height: number };
+}
+
 /** Builds the reserved Twitchy scenes and sources without changing the active scene. */
-export async function setupObs(config: Config, options: { contentScene?: string } = {}): Promise<void> {
+export async function setupObs(config: Config, options: { contentScene?: string } = {}): Promise<ObsSetupReport> {
   const url = config.env.OBS_WS_URL;
   if (!url) throw new Error("OBS_WS_URL is missing. Set it in .env (for example ws://127.0.0.1:4455).");
 
@@ -138,12 +144,7 @@ export async function setupObs(config: Config, options: { contentScene?: string 
       if (item) await obs.call("SetSceneItemIndex", { sceneName: SCENES.broadcast, sceneItemId: item.sceneItemId, sceneItemIndex: index });
     }
 
-    for (const line of changes) console.log(`• ${line}`);
-    console.log("\nManual OBS steps:");
-    console.log(`1. Set the scene sent to stream to ${SCENES.broadcast} when you are ready to broadcast through Twitchy.`);
-    console.log(`2. Set Sync Offset on each active audio source to about ${config.delayMs} ms (Render Delay is video only).`);
-    console.log("3. Verify stacked delay with a stopwatch before streaming; see docs/architecture.md §9.");
-    console.log(`Canvas: ${width}×${height}. Program scene was not changed.`);
+    return { changes, canvas: { width, height } };
   } catch (error) {
     throw new Error(`OBS setup failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   } finally {
