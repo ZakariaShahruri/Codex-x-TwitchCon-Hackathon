@@ -9,6 +9,7 @@ How we work (roles, Codex prompts, parallel work, git) is in `AGENTS.md` / `CLAU
 | `concept.md` | Goal (win), the idea (Twitchy — Stream Shield), track owners, scope tiers, milestones, demo outline, rejected ideas | Scope changes |
 | `architecture.md` | Timing guarantee, OBS layout, components, tracks and folders, event contract, stack, config, go/no-go checks | Tech decisions change |
 | `devpost.md` | Copy of the Devpost page: brief, submission requirements, prizes, judging criteria | Devpost posts an update |
-| `cheatsheet.md` | Every command: running, chat commands, watchlist, Leak Gauntlet, config, quick fixes | A command or config key changes |
+| `commands.md` | Every command: running, chat commands, watchlist, Leak Gauntlet, config, quick fixes | A command or config key changes |
+| `video.md` | Checklist for the 3-minute demo video: requirements, storyboard, lines, numbers, what not to show | A point comes up that belongs in the video |
 | `team-notes.md` | What one track needs to know about the other's changes, newest first | You change behavior the other track relies on |
 | `codex-sessions.md` | Each teammate's Codex session ID and track; marks the main thread whose ID goes in the submission | Someone starts a new Codex thread or switches track |

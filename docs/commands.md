@@ -1,4 +1,4 @@
-# Cheat sheet
+# Commands
 
 Every command in one place. Run them from the repo root.
 
