@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import type { LeakKind, WatchlistEntryInput } from "../../src/shared/events.js";
+import { BIP39_ENGLISH } from "../../src/shield/detectors/bip39-english.js";
 
 export interface GauntletCase {
   id: string;
@@ -53,6 +55,14 @@ function card(seed: string, prefix: string, length: number, groups: number[]): s
   return groups.map((size) => number.slice(cursor, (cursor += size))).join(" ");
 }
 
+/** A checksum-valid 12-word BIP39 phrase from deterministic entropy: what a wallet would really show. */
+function mnemonic(seed: string): string {
+  const entropy = Buffer.from(tail(seed, 32, "0123456789abcdef"), "hex");
+  const checksum = createHash("sha256").update(entropy).digest()[0]!.toString(2).padStart(8, "0").slice(0, 4);
+  const bits = [...entropy].map((byte) => byte.toString(2).padStart(8, "0")).join("") + checksum;
+  return bits.match(/.{11}/g)!.map((chunk) => BIP39_ENGLISH[parseInt(chunk, 2)]!).join(" ");
+}
+
 const cases: GauntletCase[] = [
   { id: "sk-project", kind: "api_key", text: token("sk-proj-", long("sk-project")), context: "OpenAI project key", size: "normal" },
   { id: "sk-ant", kind: "api_key", text: token("sk-ant-", long("sk-ant")), context: "Anthropic key", size: "normal" },
@@ -86,6 +96,10 @@ const cases: GauntletCase[] = [
   { id: "card-amex", kind: "card", text: `AMEX ${card("card-amex", "37", 15, [4, 6, 5])}`, context: "credit card", size: "normal" },
   { id: "watchlist-name", kind: "watchlist", text: "hey Marisol Okonkwo-Hart, are you live tonight?", context: "watchlist: real name", size: "normal" },
   { id: "watchlist-address", kind: "watchlist", text: "Ship to: 1638 Larkspur Lane, Apt 4", context: "watchlist: home address", size: "normal" },
+  { id: "ip-v4", kind: "ip", text: `Your public IP: 203.0.113.${Number(digits("ip-v4", 2)) + 10}`, context: "what's-my-IP page", size: "normal" },
+  { id: "ip-v6", kind: "ip", text: `inet6 2a02:6b8:${tail("ip-v6", 4, "0123456789abcdef")}::${tail("ip-v6-host", 3, "123456789abcdef")}`, context: "IPv6 in a terminal", size: "normal" },
+  { id: "seed-labeled", kind: "seed_phrase", text: `Secret Recovery Phrase: ${mnemonic("seed-labeled")}`, context: "wallet backup screen", size: "normal" },
+  { id: "seed-plain", kind: "seed_phrase", text: mnemonic("seed-plain"), context: "seed phrase pasted in notes, checksum-valid", size: "normal" },
   { id: "qr-login", kind: "qr_code", text: "Scan to sign in on your TV", context: "device login QR code", size: "normal", image: "qr-login.png" },
   { id: "decoy-react-version", kind: null, text: "react@18.3.1", context: "package version", size: "normal" },
   { id: "decoy-password-type", kind: null, text: "password: string", context: "TypeScript type", size: "normal" },
@@ -97,6 +111,9 @@ const cases: GauntletCase[] = [
   { id: "decoy-order-id", kind: null, text: "Order #4417-2290-1185 shipped", context: "order ID", size: "normal" },
   { id: "decoy-non-luhn-card", kind: null, text: "ref 4242 4242 4242 4241", context: "16 digits, fails Luhn", size: "normal" },
   { id: "decoy-ip", kind: null, text: "connected to 192.168.100.200:5432", context: "private IP and port", size: "normal" },
+  { id: "decoy-public-dns", kind: null, text: "nameserver 8.8.8.8", context: "public DNS resolver", size: "normal" },
+  { id: "decoy-build-number", kind: null, text: "build 2.0.1.7", context: "four-part version", size: "normal" },
+  { id: "decoy-word-list", kind: null, text: "apple banana cherry orange lemon grape mango olive onion garlic pepper tomato", context: "12 wordlist words, fails the checksum", size: "normal" },
   { id: "decoy-similar-name", kind: null, text: "hey Marissa Okonkwo-Hart, are you live?", context: "name close to the watchlist", size: "normal" },
 ];
 

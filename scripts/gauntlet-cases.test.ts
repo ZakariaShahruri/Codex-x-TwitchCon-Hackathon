@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import test from "node:test";
 import type { Box, LeakKind } from "../src/shared/events.js";
-import { detectApiKeys, detectCards, detectEmails, detectPasswords, detectPhones, detectWatchlist } from "../src/shield/detectors/index.js";
+import { absorbedBySeedPhrases, detectApiKeys, detectCards, detectEmails, detectIps, detectPasswords, detectPhones, detectSeedPhrases, detectWatchlist } from "../src/shield/detectors/index.js";
 import { flashCases, gauntletCases, gauntletWatchlist, type GauntletCase } from "../tools/gauntlet/cases.js";
 
 const box: Box = { x: 0, y: 0, w: 12, h: 12 };
@@ -12,10 +12,10 @@ const watchlist = gauntletWatchlist.map((entry, index) => ({ ...entry, id: `gaun
 /** Every text detector the engine runs; QR cases are images and are checked separately. */
 function detect(example: GauntletCase) {
   const lines = [lineFor(example.text)];
-  return [
-    ...detectApiKeys(lines), ...detectEmails(lines), ...detectPasswords(lines),
-    ...detectPhones(lines), ...detectCards(lines), ...detectWatchlist(lines, watchlist),
-  ];
+  return absorbedBySeedPhrases([
+    ...detectApiKeys(lines), ...detectEmails(lines), ...detectPasswords(lines), ...detectPhones(lines), ...detectCards(lines),
+    ...detectIps(lines), ...detectSeedPhrases(lines), ...detectWatchlist(lines, watchlist),
+  ]);
 }
 
 test("Leak Gauntlet cases agree with the detectors", () => {
