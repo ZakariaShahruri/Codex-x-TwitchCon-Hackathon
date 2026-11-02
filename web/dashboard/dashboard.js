@@ -46,20 +46,37 @@ function connect() {
 }
 
 function setConnection(connected) {
+  document.body.dataset.connected = String(connected);
   $("#connection-dot").dataset.connected = String(connected);
   $("#connection-label").textContent = connected ? "Connected to local shield" : "Shield disconnected · reconnecting";
   if (!connected) $("#command-feedback").textContent = "Reconnect in progress; commands are temporarily unavailable.";
-  else if ($("#command-feedback").textContent.startsWith("Reconnect")) $("#command-feedback").textContent = "Commands go directly to your local shield.";
+  else if ($("#command-feedback").textContent.startsWith("Reconnect")) $("#command-feedback").textContent = "Your local shield is ready when you are.";
 }
 
 function setShieldState(state) {
   if (!state || !["off", "armed", "degraded", "panic"].includes(state.status)) return;
+  const previousStatus = liveState?.status;
   liveState = state;
   const panel = $("#shield-state");
   panel.dataset.state = state.status;
-  const labels = { off: "OFF", armed: "ARMED", degraded: "DEGRADED", panic: "PANIC" };
+  const labels = { off: "Snoozing", armed: "On guard!", degraded: "A little worried", panic: "Panic mode" };
+  $("#status-pose").setAttribute("href", `/overlay/assets/twitchy.svg#${state.status}`);
+  $("#header-pose").setAttribute("href", `/overlay/assets/twitchy.svg#${state.status}`);
+  $("#dashboard-mascot").dataset.state = state.status;
+  document.body.dataset.panic = String(state.status === "panic");
+  if (state.status === "panic" && previousStatus !== "panic") {
+    document.body.classList.remove("panic-enter");
+    void document.body.offsetWidth;
+    document.body.classList.add("panic-enter");
+    const finishPanicEntry = (event) => {
+      if (event.animationName !== "panic-enter") return;
+      document.body.classList.remove("panic-enter");
+      document.body.removeEventListener("animationend", finishPanicEntry);
+    };
+    document.body.addEventListener("animationend", finishPanicEntry);
+  }
   $("#state-label").textContent = labels[state.status];
-  $("#state-reason").textContent = state.reason || ({ off: "Shield is disarmed", armed: "Watching your stream", degraded: "Some checks need attention", panic: "Full-screen safety mask active" }[state.status]);
+  $("#state-reason").textContent = state.reason || ({ off: "Catching a little nap", armed: "Twitchy is on guard!", degraded: "A check needs a little help", panic: "Your panic mask is up" }[state.status]);
 }
 
 function setTwitchStatus(status, fromSnapshot = false) {
@@ -68,7 +85,7 @@ function setTwitchStatus(status, fromSnapshot = false) {
   twitchStatus = status;
   const pill = $("#twitch-pill");
   pill.dataset.connected = String(status.connected);
-  pill.textContent = status.connected ? "CONNECTED" : "OFFLINE";
+  pill.textContent = status.connected ? "Connected" : "Offline";
   const detail = status.login ? `@${status.login}` : status.error || (status.connected ? "EventSub connected" : "Twitch not connected");
   const expiry = Number.isFinite(status.expiresInHours) ? ` · token ${status.expiresInHours.toFixed(1)} h` : "";
   $("#twitch-detail").textContent = `${detail}${expiry}`;
@@ -155,19 +172,21 @@ function updateMetrics() {
   $("#latency-fill").style.width = `${Math.min(100, Math.max(0, budgetMs ? p95FrameMs / budgetMs * 100 : 0))}%`;
 }
 
-function renderLeaks() {
+function renderLeaks(animateId) {
   const list = $("#leak-log");
   list.replaceChildren();
   const rows = [...leaks.values()].slice(-MAX_LOG_ROWS).reverse();
-  $("#leak-total").textContent = `${leaks.size} ${leaks.size === 1 ? "SAVE" : "SAVES"}`;
+  $("#leak-total").textContent = `${leaks.size} ${leaks.size === 1 ? "save" : "saves"}`;
   if (!rows.length) {
-    list.append(emptyRow("Detected leaks appear here with redacted previews."));
+    list.append(emptyRow("When Twitchy catches something, you'll see it here — safely redacted."));
     return;
   }
   for (const leak of rows) {
     const row = document.createElement("li");
     row.className = "leak-item";
     row.dataset.active = String(leak.active);
+    if (leak.id === animateId) row.classList.add("save-arrival");
+    const icon = makePixelIcon(leakPose(leak.kind));
     const desc = document.createElement("span");
     const kind = document.createElement("strong");
     kind.className = "leak-kind";
@@ -179,7 +198,7 @@ function renderLeaks() {
     const meta = document.createElement("small");
     meta.className = "leak-meta";
     meta.textContent = `${timestamp(leak.at)} · ${leak.active ? "ACTIVE" : "CLEARED"}`;
-    row.append(desc, meta);
+    row.append(icon, desc, meta);
     list.append(row);
   }
 }
@@ -187,7 +206,7 @@ function renderLeaks() {
 function addLeak(payload) {
   if (!payload || typeof payload.id !== "string" || typeof payload.kind !== "string" || typeof payload.preview !== "string" || !Number.isFinite(payload.at)) return;
   leaks.set(payload.id, { id: payload.id, kind: payload.kind, preview: payload.preview, at: payload.at, active: true });
-  renderLeaks();
+  renderLeaks(payload.id);
 }
 
 function clearLeak(payload) {
@@ -207,13 +226,18 @@ function showReport() {
   for (const leak of records) counts.set(leak.kind, (counts.get(leak.kind) ?? 0) + 1);
   const title = document.createElement("strong");
   title.className = "report-summary";
-  title.textContent = `Twitchy blocked ${records.length} ${records.length === 1 ? "leak" : "leaks"}`;
+  title.textContent = `${records.length} ${records.length === 1 ? "save" : "saves"}!`;
   const list = document.createElement("ul");
   list.className = "report-list";
   if (counts.size) {
     for (const [kind, count] of counts) {
       const item = document.createElement("li");
-      item.textContent = `${count} × ${kind.replaceAll("_", " ")}`;
+      const icon = makePixelIcon(leakPose(kind));
+      const label = document.createElement("span");
+      label.textContent = kind.replaceAll("_", " ");
+      const score = document.createElement("strong");
+      score.textContent = `${count} ${count === 1 ? "save" : "saves"}  ★★★`;
+      item.append(icon, label, score);
       list.append(item);
     }
   } else list.append(emptyRow("No leaks were recorded in this stream."));
@@ -228,7 +252,45 @@ function showReport() {
   times.className = "report-times";
   times.textContent = `First save: ${first === undefined ? "—" : timestamp(first)} · Last save: ${last === undefined ? "—" : timestamp(last)} · Longest active: ${longest ? `${longest.leak.kind.replaceAll("_", " ")} · ${shortDuration(longest.duration)}` : "—"}`;
   report.append(title, list, times);
-  $("#report-hint").textContent = twitchStatus?.live === false ? "Private report · previews are redacted." : "Preview report · current stream activity only.";
+  report.classList.remove("celebrate");
+  void report.offsetWidth;
+  report.classList.add("celebrate");
+  launchConfetti(report);
+  $("#report-hint").textContent = twitchStatus?.live === false ? "Your private stream recap · previews are redacted." : "A little preview of this stream's saves.";
+}
+
+function leakPose(kind) {
+  if (["email", "phone"].includes(kind)) return "envelope";
+  if (kind === "watchlist" || kind === "ip") return "house";
+  if (kind === "qr_code") return "chomp";
+  if (["card", "sensitive_region", "seed_phrase"].includes(kind)) return "vault";
+  return "shield";
+}
+
+function makePixelIcon(pose) {
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 32 32");
+  icon.setAttribute("aria-hidden", "true");
+  icon.setAttribute("class", "pixel-icon");
+  icon.setAttribute("shape-rendering", "crispEdges");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `/overlay/assets/twitchy.svg#${pose}`);
+  icon.append(use);
+  return icon;
+}
+
+function launchConfetti(container) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const colors = ["mint", "gold", "violet", "pink"];
+  for (let index = 0; index < 18; index += 1) {
+    const piece = document.createElement("i");
+    piece.className = `confetti confetti-${colors[index % colors.length]}`;
+    piece.setAttribute("aria-hidden", "true");
+    piece.style.setProperty("--confetti-x", `${(index * 37) % 100}%`);
+    piece.style.setProperty("--confetti-delay", `${(index % 6) * 45}ms`);
+    container.append(piece);
+    setTimeout(() => piece.remove(), 1_500);
+  }
 }
 
 function showSetupResult(result) {
@@ -276,6 +338,14 @@ function handleMessage(message) {
 document.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", () => {
   const action = button.dataset.action;
   if (!["on", "off", "panic", "unblur"].includes(action)) return;
+  const mascot = $("#dashboard-mascot");
+  const motion = action === "on" ? "motion-hop" : action === "panic" ? "motion-alarm" : action === "unblur" ? "motion-relax" : "";
+  if (motion) {
+    mascot.classList.remove("motion-hop", "motion-alarm", "motion-relax");
+    void mascot.offsetWidth;
+    mascot.classList.add(motion);
+    mascot.addEventListener("animationend", () => mascot.classList.remove(motion), { once: true });
+  }
   $("#command-feedback").textContent = send("shield.command", { action, by: "dashboard", at: Date.now() }) ? `${button.textContent.trim()} sent.` : "Shield disconnected; command not sent.";
 }));
 
@@ -299,7 +369,7 @@ $("#copy-overlay").addEventListener("click", async () => {
     await navigator.clipboard.writeText(url);
     $("#copy-overlay").textContent = "Copied!";
   } catch { $("#copy-overlay").textContent = "Copy blocked"; }
-  setTimeout(() => { $("#copy-overlay").textContent = "Copy"; }, 1_500);
+  setTimeout(() => { $("#copy-overlay").textContent = "Copy link"; }, 1_500);
 });
 
 $("#watchlist-form").addEventListener("submit", (event) => {
@@ -312,6 +382,13 @@ $("#watchlist-form").addEventListener("submit", (event) => {
   if (!label || !value) { $("#watchlist-feedback").textContent = "Enter both a label and a value."; return; }
   const sent = send("config.updated", { watchlist: { add: [{ label, value }] } });
   $("#watchlist-feedback").textContent = sent ? "Watchlist update sent securely to the shield." : "Shield disconnected; watchlist value cleared without sending.";
+  if (sent) {
+    const mascot = $("#dashboard-mascot");
+    mascot.classList.remove("motion-hop", "motion-alarm", "motion-relax");
+    void mascot.offsetWidth;
+    mascot.classList.add("motion-hop");
+    mascot.addEventListener("animationend", () => mascot.classList.remove("motion-hop"), { once: true });
+  }
   if (sent) { labelInput.value = ""; labelInput.focus(); }
 });
 
