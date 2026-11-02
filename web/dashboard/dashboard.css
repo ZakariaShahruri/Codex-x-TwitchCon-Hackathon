@@ -113,6 +113,30 @@ h1, h2, p { margin-top: 0; }
 .tile:nth-child(6) { --delay: .35s; }
 .tile:nth-child(7) { --delay: .42s; }
 .tile { animation-delay: var(--delay, 0s); }
+/* Preloader: Twitchy hops and blinks while the dashboard connects, and leaves with body.loading (dashboard.js drops it on the
+   first message or after its 2.5 s fallback). If the script never runs, it fades out on its own after 4 s; if the sprite
+   fails to load, the wordmark still shows. */
+.preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  background: var(--bg);
+  transition: opacity .25s ease, visibility 0s linear .25s;
+  animation: preloader-out .25s 4s forwards;
+}
+body:not(.loading) .preloader { opacity: 0; visibility: hidden; pointer-events: none; }
+.preloader-mascot { width: 96px; height: 96px; image-rendering: pixelated; animation: preloader-hop .45s steps(3, jump-none) infinite alternate; }
+.preloader-awake { animation: preloader-blink 2.4s steps(1) infinite; }
+.preloader strong { margin-top: 6px; font: 700 26px/1 "Pixelify Sans", "Inter", sans-serif; letter-spacing: .01em; }
+.preloader span { color: var(--muted); font-size: 13px; font-weight: 500; }
+@keyframes preloader-hop { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+@keyframes preloader-blink { 0% { opacity: 1; } 80% { opacity: 0; } 88% { opacity: 1; } }
+@keyframes preloader-out { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+
 /* Loading: skeleton bars with a moving shine, then each tile's content reveals in sequence. */
 body.loading .tile > * { opacity: 0; }
 body.loading .tile::after {
