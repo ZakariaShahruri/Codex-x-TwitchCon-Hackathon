@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="dark">
   <title>Twitchy · Stream console</title>
   <link rel="stylesheet" href="/dashboard/dashboard.css">
 </head>
@@ -12,91 +12,93 @@
     <header class="topbar">
       <a class="brand" href="/dashboard/" aria-label="Twitchy dashboard home">
         <svg class="brand-mascot" viewBox="0 0 32 32" aria-hidden="true" shape-rendering="crispEdges"><use id="header-pose" href="/overlay/assets/twitchy.svg#armed"></use></svg>
-        <span><strong>Twitchy</strong><small>YOUR STREAM BUDDY</small></span>
+        <span><strong>Twitchy</strong><small>Stream Shield console</small></span>
       </a>
       <div class="top-status"><span class="status-dot" id="connection-dot"></span><span id="connection-label">Finding your shield…</span></div>
     </header>
 
-    <main>
-      <section class="hero panel">
-        <div>
-          <p class="eyebrow">A LITTLE PIXEL-POWERED PROTECTION</p>
-          <h1>Twitchy's got your back!</h1>
-          <p class="muted">Your stream stays yours. Twitchy keeps the private bits safe.</p>
+    <main class="bento">
+      <section class="tile tile-hero hero" aria-labelledby="hero-title">
+        <div class="hero-top">
+          <div class="hero-state" id="shield-state" data-state="off" aria-live="polite">
+            <div class="mascot-stage"><svg id="dashboard-mascot" class="status-mascot" viewBox="0 0 32 32" aria-hidden="true" shape-rendering="crispEdges"><use id="status-pose" href="/overlay/assets/twitchy.svg#off"></use></svg></div>
+            <div class="state-copy">
+              <p class="eyebrow" id="hero-title">Shield status</p>
+              <strong id="state-label">Off duty</strong>
+              <em id="state-reason">Waiting for the shield…</em>
+            </div>
+          </div>
+          <span class="chip">Local only</span>
         </div>
-        <div class="hero-state" id="shield-state" data-state="off" aria-live="polite">
-          <svg id="dashboard-mascot" class="status-mascot" viewBox="0 0 32 32" aria-hidden="true" shape-rendering="crispEdges"><use id="status-pose" href="/overlay/assets/twitchy.svg#off"></use></svg>
-          <span class="state-copy"><small>TWITCHY'S MOOD</small><strong id="state-label">Snoozing</strong><em id="state-reason">Waiting for shield…</em></span>
+        <dl class="hero-stats">
+          <div><dt>Saves this stream</dt><dd id="hero-saves">0</dd></div>
+          <div><dt>Latency p95</dt><dd id="hero-latency">—</dd></div>
+          <div><dt>Twitch</dt><dd id="hero-twitch">Checking…</dd></div>
+        </dl>
+        <div class="hero-actions">
+        <div class="control-buttons">
+          <button class="button button-primary" data-action="on"><span aria-hidden="true">▶</span> Arm shield</button>
+          <button class="button button-secondary" data-action="off"><span aria-hidden="true">❚❚</span> Disarm</button>
+          <button class="button button-danger" data-action="panic"><span aria-hidden="true">■</span> Panic mask</button>
+          <button class="button button-secondary" data-action="unblur"><span aria-hidden="true">↺</span> Unblur</button>
+        </div>
+        <p class="hint" id="command-feedback" aria-live="polite">Commands go straight to the shield on this machine.</p>
         </div>
       </section>
 
-      <div class="dashboard-grid">
-        <section class="panel controls-panel">
-          <div class="section-heading"><div><p class="eyebrow">YOUR BUTTONS</p><h2>Twitchy's controls</h2></div><span class="chip">JUST HERE</span></div>
-          <div class="control-buttons">
-            <button class="button button-mint" data-action="on"><span aria-hidden="true">▶</span> Arm Twitchy</button>
-            <button class="button button-quiet" data-action="off"><span aria-hidden="true">Ⅱ</span> Take a nap</button>
-            <button class="button button-panic" data-action="panic"><span aria-hidden="true">✦</span> Panic shield</button>
-            <button class="button button-quiet" data-action="unblur"><span aria-hidden="true">↗</span> Unblur</button>
-          </div>
-          <p class="hint" id="command-feedback" aria-live="polite">Your local shield is ready when you are.</p>
-        </section>
+      <section class="tile tile-metrics metrics-panel">
+        <div class="section-heading"><div><p class="eyebrow">Live engine</p><h2>Latency</h2></div><span id="metric-health" class="health-badge" data-health="none">No metrics</span></div>
+        <div class="metric-main"><strong id="metric-p95">—</strong><span>ms p95 · budget <b id="metric-budget">—</b> ms</span></div>
+        <div class="latency-track"><span id="latency-fill"></span><i></i></div>
+        <div class="metric-pairs"><div><small>Last frame</small><strong id="metric-last">—</strong><span>ms</span></div><div><small>Capture rate</small><strong id="metric-fps">—</strong><span>fps</span></div></div>
+        <p class="hint" id="metric-updated">No numbers yet. Twitchy is warming up.</p>
+      </section>
 
-        <section class="panel setup-panel">
-          <div class="section-heading"><div><p class="eyebrow">LET'S GET READY</p><h2>Quick setup</h2></div><span class="step-badge">1 · 2</span></div>
-          <button class="button button-outline full" id="obs-setup"><span aria-hidden="true">▦</span> &nbsp; Set up OBS</button>
-          <label class="field-label" for="content-scene">Your content scene <span>optional</span></label>
-          <input id="content-scene" maxlength="128" placeholder="Uses the scene that's live">
-          <p class="hint" id="obs-result" aria-live="polite">Connect OBS, then run setup once.</p>
-          <div class="divider"></div>
-          <div class="twitch-row"><span class="twitch-glyph" aria-hidden="true">▣</span><div><strong>Twitch check</strong><small id="twitch-detail">Checking Twitch…</small></div><span class="mini-status" id="twitch-pill">Checking</span></div>
-          <div class="overlay-link"><span><small>YOUR OBS OVERLAY</small><code id="overlay-url">http://127.0.0.1:4173/overlay/</code></span><button class="copy-button" id="copy-overlay">Copy link</button></div>
-        </section>
+      <section class="tile tile-setup setup-panel">
+        <div class="section-heading"><div><p class="eyebrow">Get ready</p><h2>Setup</h2></div><span class="step-badge">2 steps</span></div>
+        <button class="button button-secondary full" id="obs-setup"><span aria-hidden="true">▦</span> Set up OBS</button>
+        <label class="field-label" for="content-scene">Content scene <span>optional</span></label>
+        <input id="content-scene" maxlength="128" placeholder="Uses the scene that's live">
+        <p class="hint" id="obs-result" aria-live="polite">Connect OBS, then run setup once.</p>
+        <div class="divider"></div>
+        <div class="twitch-row"><span class="twitch-glyph" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2 1 1 4v10h3v2h2l2-2h3l4-4V1H2zm11 8-2 2H8l-2 2v-2H3V2.5h10V9z" fill="currentColor"/><path d="M10 4.5h1.5v3.5H10zM7 4.5h1.5v3.5H7z" fill="currentColor"/></svg></span><div><strong>Twitch</strong><small id="twitch-detail">Checking Twitch…</small></div><span class="mini-status" id="twitch-pill">Checking</span></div>
+        <div class="overlay-link"><span><small>OBS overlay URL</small><code id="overlay-url">http://127.0.0.1:4173/overlay/</code></span><button class="copy-button" id="copy-overlay">Copy link</button></div>
+      </section>
 
-        <section class="panel watchlist-panel">
-          <div class="section-heading"><div><p class="eyebrow">ONLY YOUR SHIELD SEES VALUES</p><h2>Personal watchlist</h2></div><span class="lock-mark" aria-label="Private">▣</span></div>
-          <form id="watchlist-form" autocomplete="off">
-            <label class="field-label" for="watchlist-label">Label</label>
-            <input id="watchlist-label" maxlength="80" placeholder="e.g. home address" required>
-            <label class="field-label" for="watchlist-value">Private value <span>hidden while typing</span></label>
-            <div class="input-action"><input id="watchlist-value" type="password" maxlength="512" autocomplete="new-password" placeholder="Type it here, then it's cleared" required><button class="button button-mint" type="submit">Add to list</button></div>
-          </form>
-          <p class="hint" id="watchlist-feedback" aria-live="polite">Your value goes straight to this shield, then the box is cleared.</p>
-          <ul class="saved-list" id="watchlist-list" aria-label="Saved watchlist labels"><li class="empty">No labels received yet.</li></ul>
-        </section>
+      <section class="tile tile-leaks leaks-panel">
+        <div class="section-heading"><div><p class="eyebrow">This stream</p><h2>Twitchy's saves</h2></div><span id="leak-total" class="chip chip-accent">0 saves</span></div>
+        <ol id="leak-log" class="leak-log"><li class="empty">When Twitchy catches something, it shows up here, redacted.</li></ol>
+      </section>
 
-        <section class="panel metrics-panel">
-          <div class="section-heading"><div><p class="eyebrow">HOW FAST IS TWITCHY?</p><h2>Stream health</h2></div><span id="metric-health" class="health-badge" data-health="none">NO METRICS</span></div>
-          <div class="metric-main"><strong id="metric-p95">—</strong><span>p95 / <b id="metric-budget">—</b> ms budget</span></div>
-          <div class="latency-track"><span id="latency-fill"></span><i></i></div>
-          <div class="metric-pairs"><div><small>LAST FRAME</small><strong id="metric-last">—</strong><span>ms</span></div><div><small>FRAMES / SECOND</small><strong id="metric-fps">—</strong><span>fps</span></div></div>
-          <p class="hint" id="metric-updated">No numbers yet — Twitchy is warming up.</p>
-        </section>
+      <section class="tile tile-watchlist watchlist-panel">
+        <div class="section-heading"><div><p class="eyebrow">Private to this machine</p><h2>Personal watchlist</h2></div><span class="lock-mark" aria-label="Private"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7h1zm2 0h4V5a2 2 0 0 0-4 0v2z" fill="currentColor"/></svg></span></div>
+        <form id="watchlist-form" class="watchlist-form" autocomplete="off">
+          <div><label class="field-label" for="watchlist-label">Label</label><input id="watchlist-label" maxlength="80" placeholder="e.g. home address" required></div>
+          <div><label class="field-label" for="watchlist-value">Private value <span>hidden while typing</span></label>
+          <div class="input-action"><input id="watchlist-value" type="password" maxlength="512" autocomplete="new-password" placeholder="Cleared as soon as you add it" required><button class="button button-primary" type="submit">Add</button></div></div>
+        </form>
+        <p class="hint" id="watchlist-feedback" aria-live="polite">Values go straight to the shield and never come back to this page.</p>
+        <ul class="saved-list" id="watchlist-list" aria-label="Saved watchlist labels"><li class="empty">No labels saved yet.</li></ul>
+      </section>
 
-        <section class="panel leaks-panel">
-          <div class="section-heading"><div><p class="eyebrow">TWITCHY'S SAVES</p><h2>Saved this stream</h2></div><span id="leak-total" class="chip">0 saves</span></div>
-          <ol id="leak-log" class="leak-log"><li class="empty">When Twitchy catches something, you'll see it here — safely redacted.</li></ol>
-        </section>
+      <section class="tile tile-report report-panel">
+        <div class="section-heading"><div><p class="eyebrow">Stream recap</p><h2>Stream complete</h2></div><button class="text-button" id="show-report">Show report now</button></div>
+        <p class="hint" id="report-hint">When the stream ends, Twitchy sums up its saves here.</p>
+        <div id="report-content" class="report-content" hidden></div>
+      </section>
 
-        <section class="panel report-panel">
-          <div class="section-heading"><div><p class="eyebrow">YOUR STREAM STORY</p><h2>Stream complete!</h2></div><button class="text-button" id="show-report">Show report now</button></div>
-          <p class="hint" id="report-hint">When stream time's over, Twitchy will show you the saves.</p>
-          <div id="report-content" class="report-content" hidden></div>
-        </section>
-
-        <details class="panel rules-panel" id="rules-panel">
-          <summary><span><span class="eyebrow">EXTRA CREDIT · EASY TO TUCK AWAY</span><strong>Teach Twitchy a new rule</strong><small>Describe what to hide, then review the rule Twitchy learns.</small></span><span class="disclosure">＋</span></summary>
-          <div class="rules-content">
-            <label class="field-label" for="rule-text">What should Twitchy watch for?</label>
-            <textarea id="rule-text" maxlength="2000" rows="3" placeholder="Hide anything with my mom's name"></textarea>
-            <button class="button button-outline" id="compile-rule">Make a rule</button>
-            <p class="hint" id="rule-feedback" aria-live="polite">Twitchy learns this once; it doesn't slow down stream watching.</p>
-            <ul class="saved-list" id="rule-list" aria-label="Saved rules"><li class="empty">No saved rules received yet.</li></ul>
-          </div>
-        </details>
-      </div>
+      <details class="tile tile-rules rules-panel" id="rules-panel">
+        <summary><span><span class="eyebrow">Experimental</span><strong>Plain-English rules</strong><small>Describe what to hide; Twitchy compiles it into a rule once.</small></span><span class="disclosure" aria-hidden="true">+</span></summary>
+        <div class="rules-content">
+          <label class="field-label" for="rule-text">What should Twitchy watch for?</label>
+          <textarea id="rule-text" maxlength="2000" rows="3" placeholder="Hide anything with my mom's name"></textarea>
+          <button class="button button-secondary" id="compile-rule">Make a rule</button>
+          <p class="hint" id="rule-feedback" aria-live="polite">Compiled once, so it never slows down the live shield.</p>
+          <ul class="saved-list" id="rule-list" aria-label="Saved rules"><li class="empty">No saved rules yet.</li></ul>
+        </div>
+      </details>
     </main>
-    <footer><span class="footer-mascot">✦ &nbsp; Twitchy keeps watch so you can have fun.</span><span>MADE FOR YOUR STREAM · RIGHT HERE ON YOUR MACHINE</span></footer>
+    <footer><span>Twitchy keeps watch so you can focus on your stream.</span><span>Runs locally · nothing leaves this machine</span></footer>
   </div>
   <script type="module" src="/dashboard/dashboard.js"></script>
 </body>

@@ -50,7 +50,7 @@ function setConnection(connected) {
   $("#connection-dot").dataset.connected = String(connected);
   $("#connection-label").textContent = connected ? "Connected to local shield" : "Shield disconnected · reconnecting";
   if (!connected) $("#command-feedback").textContent = "Reconnect in progress; commands are temporarily unavailable.";
-  else if ($("#command-feedback").textContent.startsWith("Reconnect")) $("#command-feedback").textContent = "Your local shield is ready when you are.";
+  else if ($("#command-feedback").textContent.startsWith("Reconnect")) $("#command-feedback").textContent = "Commands go straight to the shield on this machine.";
 }
 
 function setShieldState(state) {
@@ -59,7 +59,7 @@ function setShieldState(state) {
   liveState = state;
   const panel = $("#shield-state");
   panel.dataset.state = state.status;
-  const labels = { off: "Snoozing", armed: "On guard!", degraded: "A little worried", panic: "Panic mode" };
+  const labels = { off: "Off duty", armed: "On guard", degraded: "Needs attention", panic: "Panic mask on" };
   $("#status-pose").setAttribute("href", `/overlay/assets/twitchy.svg#${state.status}`);
   $("#header-pose").setAttribute("href", `/overlay/assets/twitchy.svg#${state.status}`);
   $("#dashboard-mascot").dataset.state = state.status;
@@ -76,7 +76,7 @@ function setShieldState(state) {
     document.body.addEventListener("animationend", finishPanicEntry);
   }
   $("#state-label").textContent = labels[state.status];
-  $("#state-reason").textContent = state.reason || ({ off: "Catching a little nap", armed: "Twitchy is on guard!", degraded: "A check needs a little help", panic: "Your panic mask is up" }[state.status]);
+  $("#state-reason").textContent = state.reason || ({ off: "Shield is disarmed", armed: "Twitchy is watching your stream", degraded: "A check needs attention", panic: "The full-screen mask is up" }[state.status]);
 }
 
 function setTwitchStatus(status, fromSnapshot = false) {
@@ -89,6 +89,8 @@ function setTwitchStatus(status, fromSnapshot = false) {
   const detail = status.login ? `@${status.login}` : status.error || (status.connected ? "EventSub connected" : "Twitch not connected");
   const expiry = Number.isFinite(status.expiresInHours) ? ` · token ${status.expiresInHours.toFixed(1)} h` : "";
   $("#twitch-detail").textContent = `${detail}${expiry}`;
+  $("#hero-twitch").textContent = !status.connected ? "Offline" : status.live === true ? "Live" : "Connected";
+  $("#hero-twitch").className = status.connected ? "is-good" : "is-bad";
   if (!fromSnapshot && status.live === true && wasLive !== true) {
     leaks.clear();
     renderLeaks();
@@ -149,12 +151,14 @@ function updateMetrics() {
   const track = $(".latency-track");
   if (!lastMetrics || Date.now() - lastMetricAt >= METRICS_STALE_MS) {
     health.dataset.health = "none";
-    health.textContent = "NO METRICS";
+    health.textContent = "No metrics";
+    $("#hero-latency").textContent = "—";
+    $("#hero-latency").className = "";
     $("#metric-p95").textContent = "—";
     $("#metric-budget").textContent = "—";
     $("#metric-last").textContent = "—";
     $("#metric-fps").textContent = "—";
-    $("#metric-updated").textContent = "No metrics · waiting for the shield";
+    $("#metric-updated").textContent = "No metrics yet · waiting for the shield";
     track.dataset.health = "none";
     $("#latency-fill").style.width = "0%";
     return;
@@ -162,9 +166,11 @@ function updateMetrics() {
   const { lastFrameMs, p95FrameMs, budgetMs, framesPerSec, at } = lastMetrics;
   const healthLevel = p95FrameMs > budgetMs ? "bad" : p95FrameMs >= budgetMs * .8 ? "warn" : "good";
   health.dataset.health = healthLevel;
-  health.textContent = healthLevel === "good" ? "ON BUDGET" : healthLevel === "warn" ? "NEAR BUDGET" : "OVER BUDGET";
+  health.textContent = healthLevel === "good" ? "On budget" : healthLevel === "warn" ? "Near budget" : "Over budget";
   track.dataset.health = healthLevel;
   $("#metric-p95").textContent = p95FrameMs.toFixed(1);
+  $("#hero-latency").textContent = `${Math.round(p95FrameMs)} ms`;
+  $("#hero-latency").className = healthLevel === "bad" ? "is-bad" : "is-good";
   $("#metric-budget").textContent = budgetMs.toFixed(0);
   $("#metric-last").textContent = lastFrameMs.toFixed(1);
   $("#metric-fps").textContent = framesPerSec.toFixed(1);
@@ -177,8 +183,9 @@ function renderLeaks(animateId) {
   list.replaceChildren();
   const rows = [...leaks.values()].slice(-MAX_LOG_ROWS).reverse();
   $("#leak-total").textContent = `${leaks.size} ${leaks.size === 1 ? "save" : "saves"}`;
+  $("#hero-saves").textContent = String(leaks.size);
   if (!rows.length) {
-    list.append(emptyRow("When Twitchy catches something, you'll see it here — safely redacted."));
+    list.append(emptyRow("When Twitchy catches something, it shows up here, redacted."));
     return;
   }
   for (const leak of rows) {
@@ -190,14 +197,14 @@ function renderLeaks(animateId) {
     const desc = document.createElement("span");
     const kind = document.createElement("strong");
     kind.className = "leak-kind";
-    kind.textContent = leak.kind.replaceAll("_", " ");
+    kind.textContent = kindLabel(leak.kind);
     const preview = document.createElement("small");
     preview.className = "leak-preview";
     preview.textContent = leak.preview;
     desc.append(kind, preview);
     const meta = document.createElement("small");
     meta.className = "leak-meta";
-    meta.textContent = `${timestamp(leak.at)} · ${leak.active ? "ACTIVE" : "CLEARED"}`;
+    meta.textContent = `${timestamp(leak.at)} · ${leak.active ? "Active" : "Cleared"}`;
     row.append(icon, desc, meta);
     list.append(row);
   }
@@ -226,7 +233,7 @@ function showReport() {
   for (const leak of records) counts.set(leak.kind, (counts.get(leak.kind) ?? 0) + 1);
   const title = document.createElement("strong");
   title.className = "report-summary";
-  title.textContent = `${records.length} ${records.length === 1 ? "save" : "saves"}!`;
+  title.textContent = `${records.length} ${records.length === 1 ? "save" : "saves"} this stream`;
   const list = document.createElement("ul");
   list.className = "report-list";
   if (counts.size) {
@@ -234,9 +241,9 @@ function showReport() {
       const item = document.createElement("li");
       const icon = makePixelIcon(leakPose(kind));
       const label = document.createElement("span");
-      label.textContent = kind.replaceAll("_", " ");
+      label.textContent = kindLabel(kind);
       const score = document.createElement("strong");
-      score.textContent = `${count} ${count === 1 ? "save" : "saves"}  ★★★`;
+      score.textContent = `${count} ${count === 1 ? "save" : "saves"}`;
       item.append(icon, label, score);
       list.append(item);
     }
@@ -250,7 +257,7 @@ function showReport() {
   }, undefined);
   const times = document.createElement("div");
   times.className = "report-times";
-  times.textContent = `First save: ${first === undefined ? "—" : timestamp(first)} · Last save: ${last === undefined ? "—" : timestamp(last)} · Longest active: ${longest ? `${longest.leak.kind.replaceAll("_", " ")} · ${shortDuration(longest.duration)}` : "—"}`;
+  times.textContent = `First save: ${first === undefined ? "—" : timestamp(first)} · Last save: ${last === undefined ? "—" : timestamp(last)} · Longest active: ${longest ? `${kindLabel(longest.leak.kind)} · ${shortDuration(longest.duration)}` : "—"}`;
   report.append(title, list, times);
   report.classList.remove("celebrate");
   void report.offsetWidth;
@@ -258,6 +265,12 @@ function showReport() {
   launchConfetti(report);
   $("#report-hint").textContent = twitchStatus?.live === false ? "Your private stream recap · previews are redacted." : "A little preview of this stream's saves.";
 }
+
+const KIND_LABELS = {
+  api_key: "API key", email: "Email", password: "Password", phone: "Phone number", card: "Card number", ip: "IP address",
+  seed_phrase: "Seed phrase", qr_code: "QR code", watchlist: "Watchlist", custom_rule: "Custom rule", sensitive_region: "Sensitive region",
+};
+const kindLabel = (kind) => KIND_LABELS[kind] ?? kind.replaceAll("_", " ");
 
 function leakPose(kind) {
   if (["email", "phone"].includes(kind)) return "envelope";
