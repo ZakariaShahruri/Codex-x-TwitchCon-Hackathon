@@ -113,6 +113,12 @@ test("live Leak Gauntlet OCR damage still detects the secret", () => {
   assert.equal(detectApiKeys([line(`${"rk_"}test_wqdNPi×3UGyT50uuxn6SanN0u9GFdia68L5f`)]).length, 1);
   assert.equal(detectApiKeys([line("SERVICE_T0KEN=Gm1gGc66ExD8q0qvcYQ1P9QS1zcC7fuDsPRc")]).length, 1);
   assert.equal(detectPasswords([line("PASSW0RD=Gauntlet-kFep9R6kCz")]).length, 1);
+  // Small text: the underscore after a prefix vanishes, and `1` reads as `]` mid-token.
+  assert.equal(detectApiKeys([line(`$ ${"hf"} aHmy7Jb6JU55B9s7ZpYQUxHLbs3cd3oyFhtb`)]).length, 1);
+  assert.equal(detectApiKeys([line(`${"ghu"} w3I6xml80s0aCzTtDly4dcOMGKCnQyxBQNCv`)]).length, 1);
+  assert.equal(detectApiKeys([line(`${"sk"} live 51HxYzAbCdEfGhIjKlMnOpQrSt`)]).length, 1);
+  assert.equal(detectApiKeys([line("SERVICE_TOKEN=Gm1gGc66ExD8qoqvcYQ]P9QS1zcC7fuDsPRc")]).length, 1);
+  assert.equal(detectApiKeys([line("const first = items[0] ?? fallback")]).length, 0);
 });
 
 test("same-row OCR fragments join, other rows and distant columns do not", () => {

@@ -41,8 +41,15 @@ function looksLikeHighEntropyCredential(value: string): boolean {
   return value.length >= 24 && new Set(value).size >= 12 && entropy(value) >= 3.45;
 }
 
-/** Vision reads `l`/`I` as `|` in proportional fonts; no token contains `|`, so it is read back as `l` (same length). */
-const tokenText = (text: string): string => text.replace(/\|/g, "l");
+/**
+ * Undoes Vision misreads that break token patterns, keeping the length so offsets stay valid: `l`/`I` read as `|`,
+ * or as `[`/`]` mid-token; and a dropped underscore after a known prefix (`hf aHmy…` for `hf_aHmy…`), which small
+ * text loses because the underscore sits on the baseline.
+ */
+const tokenText = (text: string): string => text
+  .replace(/\|/g, "l")
+  .replace(/(?<=[A-Z0-9])[[\]](?=[A-Z0-9])/gi, "l")
+  .replace(/\b((?:sk|rk)[_ ](?:live|test)|gh[opsur]|github_pat|hf|npm) (?=[A-Z0-9]{16})/gi, (_, prefix: string) => `${prefix.replace(" ", "_")}_`);
 
 function findRanges(line: OCRTextLine): TextRange[] {
   const compact = compactText(tokenText(line.text));
