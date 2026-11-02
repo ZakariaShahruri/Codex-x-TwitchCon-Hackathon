@@ -7,6 +7,7 @@ import { browserEvents, type EventMap } from "../shared/events.js";
 import type { EventBus } from "../shared/bus.js";
 import type { Config } from "../shared/config.js";
 import type { StartTrack } from "../shared/track.js";
+import { startMockShield } from "./mock-shield.js";
 
 type Role = "overlay" | "dashboard";
 type BrowserEvent = typeof browserEvents[number];
@@ -59,6 +60,7 @@ export const start: StartTrack = async (bus, config) => {
       }
     });
   }
+  const stopMockShield = startMockShield(bus, config.armOnStart);
 
   const mimeTypes: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml" };
   server = createServer(async (req, res) => {
@@ -107,6 +109,7 @@ export const start: StartTrack = async (bus, config) => {
     console.log(`web server listening at http://127.0.0.1:${config.webPort}/overlay/`);
   } catch (error) {
     for (const remove of removers) remove();
+    stopMockShield();
     wsServer.close();
     throw bindError(config.webPort, error);
   }

@@ -1,4 +1,10 @@
 import { parseChatNotification } from "./chat.js";
+import { createChatSender } from "./sender.js";
+import { createTokenManager } from "./token.js";
+import type { EventBus } from "../shared/bus.js";
+import type { Config } from "../shared/config.js";
+import type { EventMap } from "../shared/events.js";
+import type { StartTrack } from "../shared/track.js";
 
 const EVENTSUB_URL = "wss://eventsub.wss.twitch.tv/ws";
 const SUBSCRIPTIONS = [
@@ -7,7 +13,6 @@ const SUBSCRIPTIONS = [
   { type: "stream.offline", version: "1", condition: (broadcaster: string) => ({ broadcaster_user_id: broadcaster }) },
 ] as const;
 const HELIX_SUBSCRIPTIONS_URL = "https://api.twitch.tv/helix/eventsub/subscriptions";
-const TOKEN_HELP = 'Get a replacement with `twitch token --user-token --scopes "user:read:chat user:write:chat user:bot"`, then update TWITCH_BOT_TOKEN.';
 
 interface SocketMessage { data: unknown }
 interface SocketClose { code?: number; reason?: string }
@@ -41,6 +46,9 @@ export interface EventSubDependencies {
   retryBaseMs?: number;
   retryMaxMs?: number;
   authRetryMs?: number;
+  twitchyCooldownMs?: number;
+  chatBatchMs?: number;
+  chatMessageGapMs?: number;
 }
 
 function asRecord(value: unknown): Record<string, any> | undefined {
@@ -58,7 +66,9 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
   const retryMaxMs = dependencies.retryMaxMs ?? 30_000;
   const authRetryMs = dependencies.authRetryMs ?? 60_000;
 
-  return async (_bus: unknown, config: { env?: Record<string, string | undefined> }) => {
+  const twitchyCooldownMs = dependencies.twitchyCooldownMs ?? 15_000;
+
+  return async (bus: EventBus, config: Config) => {
     const env = config?.env ?? {};
     const required = ["TWITCH_CLIENT_ID", "TWITCH_BOT_TOKEN", "TWITCH_BOT_USER_ID", "TWITCH_BROADCASTER_ID"] as const;
     const missing = required.filter((name) => !env[name]?.trim());
@@ -71,10 +81,66 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     const token = env.TWITCH_BOT_TOKEN!.replace(/^oauth:/i, "");
     const botId = env.TWITCH_BOT_USER_ID!;
     const broadcasterId = env.TWITCH_BROADCASTER_ID!;
-    const headers = {
-      "Client-Id": clientId,
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+    const tokenManager = createTokenManager({
+      clientId, accessToken: token, clientSecret: env.TWITCH_CLIENT_SECRET,
+      refreshToken: env.TWITCH_BOT_REFRESH_TOKEN, fetch: fetcher, logger,
+    });
+    void tokenManager.start();
+    const sender = createChatSender({
+      bus, token: tokenManager, broadcasterId, botId, logger,
+      batchMs: dependencies.chatBatchMs, messageGapMs: dependencies.chatMessageGapMs,
+    });
+    let shieldStatus: EventMap["shield.state"]["status"] = "off";
+    let leakCount = 0;
+    let lastTotalBlocked = 0;
+    let streamLeakBaseline = 0;
+    const stateListener = (state: EventMap["shield.state"]) => { shieldStatus = state.status; };
+    const leakCountListener = (leak: EventMap["leak.detected"]) => {
+      lastTotalBlocked = leak.totalBlocked;
+      leakCount = Math.max(0, lastTotalBlocked - streamLeakBaseline);
+    };
+    bus.on("shield.state", stateListener);
+    bus.on("leak.detected", leakCountListener);
+    const cooldowns = new Map<string, number>();
+    const seenIds = new Set<string>();
+    const seenOrder: string[] = [];
+    const rememberMessage = (id: string) => {
+      if (!id) return true;
+      if (seenIds.has(id)) return false;
+      seenIds.add(id);
+      seenOrder.push(id);
+      if (seenOrder.length > 10_000) seenIds.delete(seenOrder.shift()!);
+      return true;
+    };
+
+    const onChat = (message: NonNullable<ReturnType<typeof parseChatNotification>>) => {
+      const command = message.text.trim().toLowerCase();
+      if (command === "!twitchy") {
+        const key = message.userId || message.login;
+        const now = Date.now();
+        for (const [userId, previousAt] of cooldowns) {
+          if (now - previousAt >= twitchyCooldownMs) cooldowns.delete(userId);
+        }
+        const last = cooldowns.get(key);
+        if (last !== undefined && now - last < twitchyCooldownMs) return;
+        cooldowns.delete(key);
+        cooldowns.set(key, now);
+        if (cooldowns.size > 20_000) cooldowns.delete(cooldowns.keys().next().value!);
+        sender.sendReply(`🛡 ${leakCount} leaks blocked this stream · shield ${shieldStatus}`);
+        return;
+      }
+      const actions: Record<string, EventMap["shield.command"]["action"]> = {
+        "!shield on": "on", "!shield off": "off", "!panic": "panic", "!unblur": "unblur",
+      };
+      const action = actions[command];
+      if (!action || (!message.badges.includes("broadcaster") && !message.badges.includes("moderator"))) return;
+      const wasPanic = shieldStatus === "panic";
+      bus.emit("shield.command", { action, by: message.login, at: Date.now() });
+      const replies = {
+        on: "🛡 Shield armed.", off: "Shield disarmed.", panic: "🚨 Panic mask on.",
+        unblur: wasPanic ? "Panic lifted." : "False positive dismissed.",
+      } as const;
+      sender.sendReply(replies[action]);
     };
 
     const sockets = new Set<Connection>();
@@ -171,16 +237,16 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     };
 
     const postSubscription = async (type: typeof SUBSCRIPTIONS[number]["type"], sessionId: string) => {
-      const response = await fetcher(HELIX_SUBSCRIPTIONS_URL, {
+      const response = await tokenManager.request(HELIX_SUBSCRIPTIONS_URL, {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(makeSubscriptionBody(type, sessionId)),
       });
       return response.status;
     };
 
     const authenticationFailed = (connection: Connection) => {
-      logger.error(`[twitch] Helix returned 401: TWITCH_BOT_TOKEN is invalid or expired. ${TOKEN_HELP}`);
+      logger.error("[twitch] EventSub subscription still returned 401; retrying with a fresh session.");
       if (!removeConnection(connection, true)) return;
       scheduleReconnect(authRetryMs);
     };
@@ -211,7 +277,7 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     const resubscribeRevoked = async (connection: Connection, type: string, status: string) => {
       const recoverable = status === "version_removed" || status === "beta_maintenance";
       if (!recoverable || !connection.sessionId || !SUBSCRIPTIONS.some((item) => item.type === type)) {
-        if (status === "authorization_revoked") logger.error(`[twitch] Reauthorize the bot token and restart EventSub. ${TOKEN_HELP}`);
+        if (status === "authorization_revoked") logger.error("[twitch] Reauthorize the bot token and restart EventSub.");
         if (status === "user_removed") logger.error("[twitch] Verify TWITCH_BOT_USER_ID and TWITCH_BROADCASTER_ID; Twitch removed a user referenced by the subscription.");
         return;
       }
@@ -219,7 +285,10 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
         const code = await postSubscription(type as typeof SUBSCRIPTIONS[number]["type"], connection.sessionId);
         if (code === 401) { authenticationFailed(connection); return; }
         if (code >= 200 && code < 300) logger.log(`[twitch] Resubscribed to ${type} after recoverable revocation (${status}).`);
-        else logger.error(`[twitch] Could not resubscribe to ${type} after ${status} (HTTP ${code}); it will be retried with a fresh session.`);
+        else {
+          logger.error(`[twitch] Could not resubscribe to ${type} after ${status} (HTTP ${code}); retrying with a fresh session.`);
+          failConnection(connection, "recoverable revocation resubscribe failed; reconnecting");
+        }
       } catch {
         logger.error(`[twitch] Network error resubscribing to ${type} after ${status}; it will be retried with a fresh session.`);
         failConnection(connection, "recoverable revocation resubscribe failed; reconnecting");
@@ -289,13 +358,23 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
           return;
         }
         case "notification": {
+          const messageId = typeof metadata.message_id === "string" ? metadata.message_id : "";
+          if (!rememberMessage(messageId)) return;
           const parsed = parseChatNotification(message);
-          if (parsed) logger.log(`chat ${parsed.user} [${parsed.badges.join(", ")}]: ${parsed.text}`);
+          if (parsed) onChat(parsed);
           else {
             const subscription = asRecord(payload.subscription);
             const event = asRecord(payload.event);
-            if (subscription?.type === "stream.online") logger.log(`[twitch] stream.online${typeof event?.broadcaster_user_name === "string" ? `: ${event.broadcaster_user_name}` : "."}`);
-            if (subscription?.type === "stream.offline") logger.log(`[twitch] stream.offline${typeof event?.broadcaster_user_name === "string" ? `: ${event.broadcaster_user_name}` : "."}`);
+            if (subscription?.type === "stream.online") {
+              logger.log(`[twitch] stream.online${typeof event?.broadcaster_user_name === "string" ? `: ${event.broadcaster_user_name}` : "."}`);
+              streamLeakBaseline = lastTotalBlocked;
+              leakCount = 0;
+              bus.emit("shield.command", { action: "on", by: "stream.online", at: Date.now() });
+            }
+            if (subscription?.type === "stream.offline") {
+              logger.log(`[twitch] stream.offline${typeof event?.broadcaster_user_name === "string" ? `: ${event.broadcaster_user_name}` : "."}`);
+              sender.sendReply(`🛡 Twitchy blocked ${leakCount} leaks this stream`);
+            }
           }
           return;
         }
@@ -321,7 +400,7 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       else active = connection;
       startWelcomeTimer(connection);
       socket.addEventListener("message", (event: SocketMessage) => { void handleMessage(connection, event.data).catch((error) => logger.error("[twitch] EventSub message handler failed:", error)); });
-      socket.addEventListener("error", () => failConnection(connection, "socket error; reconnecting"));
+      socket.addEventListener("error", () => failConnection(connection, "error; reconnecting"));
       socket.addEventListener("close", (event: SocketClose) => {
         if (!sockets.has(connection)) return;
         const wasActive = active === connection;
@@ -351,6 +430,10 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       for (const connection of [...sockets]) removeConnection(connection, true);
       active = undefined;
       candidate = undefined;
+      bus.off("shield.state", stateListener);
+      bus.off("leak.detected", leakCountListener);
+      sender.stop();
+      tokenManager.stop();
     };
   };
 }

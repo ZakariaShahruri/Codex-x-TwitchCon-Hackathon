@@ -1,5 +1,8 @@
 export interface ParsedChatMessage {
   user: string;
+  userId: string;
+  login: string;
+  messageId: string;
   /** Badge set IDs such as `broadcaster`, `moderator` and `subscriber`. */
   badges: string[];
   text: string;
@@ -32,5 +35,12 @@ export function parseChatNotification(value: unknown): ParsedChatMessage | undef
     const fragment = record(item);
     return typeof fragment?.text === "string" ? [fragment.text] : [];
   }).join("");
-  return { user, badges, text };
+  return {
+    user,
+    userId: typeof event.chatter_user_id === "string" ? event.chatter_user_id : "",
+    login: typeof event.chatter_user_login === "string" ? event.chatter_user_login : user,
+    messageId: typeof metadata.message_id === "string" ? metadata.message_id : "",
+    badges,
+    text,
+  };
 }
