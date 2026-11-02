@@ -14,7 +14,6 @@ export interface PlannedCase {
   theme: "light" | "dark";
   style: "terminal" | "editor" | "json" | "dm";
   visibleMs: number;
-  holdMs: number;
   flash: boolean;
 }
 
@@ -29,7 +28,10 @@ function randomFrom(seed: number): () => number {
   };
 }
 
-export function createGauntletPlan(seed: number, holdMs: number): PlannedCase[] {
+/** Long enough to read on video and for OCR to see each case several times; decoys get the same time to prove they stay clean. */
+const VISIBLE_MS = 1_500;
+
+export function createGauntletPlan(seed: number): PlannedCase[] {
   const random = randomFrom(seed);
   const shuffle = <T>(values: readonly T[]): T[] => {
     const result = [...values];
@@ -62,8 +64,7 @@ export function createGauntletPlan(seed: number, holdMs: number): PlannedCase[] 
       fontPx: 12 + Math.floor(random() * 7),
       theme: random() < 0.5 ? "light" : "dark",
       style: styles[index % styles.length],
-      visibleMs: flash ? 250 + Math.floor(random() * 351) : item.kind === null ? 350 : 650,
-      holdMs: item.kind === null ? 0 : holdMs,
+      visibleMs: flash ? 250 + Math.floor(random() * 351) : VISIBLE_MS,
       flash,
     };
   });

@@ -3,9 +3,9 @@ import test from "node:test";
 import { createGauntletPlan } from "./plan.js";
 
 test("gauntlet plan is seeded, varied, and separates secrets, decoys, and flashes", () => {
-  const first = createGauntletPlan(12345, 1_250);
-  assert.deepEqual(createGauntletPlan(12345, 1_250), first);
-  assert.notDeepEqual(createGauntletPlan(54321, 1_250), first);
+  const first = createGauntletPlan(12345);
+  assert.deepEqual(createGauntletPlan(12345), first);
+  assert.notDeepEqual(createGauntletPlan(54321), first);
   const secretRounds = first.filter((item) => item.label.startsWith("round "));
   assert.equal(secretRounds.length, 25);
   assert.equal(secretRounds[0]?.label, "round 1/25");

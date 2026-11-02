@@ -32,6 +32,8 @@ async function body(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+const roundBox = (box: Box): Box => ({ x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.w), h: Math.round(box.h) });
+
 function covers(mask: Box, box: Box): boolean {
   return mask.x <= box.x && mask.y <= box.y && mask.x + mask.w >= box.x + box.w && mask.y + mask.h >= box.y + box.h;
 }
@@ -49,7 +51,8 @@ async function main(): Promise<void> {
   const seedArg = process.argv.find((arg) => arg.startsWith("--seed="))?.slice("--seed=".length);
   const seed = seedArg === undefined ? Math.floor(Math.random() * 0x7fffffff) : Number(seedArg);
   assert.ok(Number.isSafeInteger(seed) && seed >= 0, "--seed must be a non-negative safe integer");
-  const plan = createGauntletPlan(seed, 0);
+  const plan = createGauntletPlan(seed);
+  const runLimitMs = plan.reduce((sum, item) => sum + item.visibleMs, 0) + 15_000;
   const plannedById = new Map(plan.map((item) => [item.id, item]));
   const timed = new Map<string, TimedCase>();
   const leaks: GauntletLeakEvent[] = [];
@@ -98,6 +101,10 @@ async function main(): Promise<void> {
     maskObservations.push(observation);
   });
   bus.on("leak.cleared", (event) => { cleared.push({ id: event.id, at: event.at }); });
+  // The first OCR frame of a fresh helper loads Vision's models (~0.5–1.3 s); start case 1 only once frames flow in budget.
+  let shieldWarmResolve!: () => void;
+  const shieldWarm = new Promise<void>((resolveWarm) => { shieldWarmResolve = resolveWarm; });
+  bus.on("engine.metrics", (metrics) => { if (metrics.framesPerSec > 0 && metrics.lastFrameMs <= metrics.budgetMs) shieldWarmResolve(); });
 
   try {
     const html = await readFile(resolve("tools/gauntlet/page.html"), "utf8");
@@ -106,6 +113,7 @@ async function main(): Promise<void> {
       if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,POST,OPTIONS", "access-control-allow-headers": "content-type" }).end(); return; }
       if (req.method === "GET" && pathname === "/") { send(res, 200, html, "text/html; charset=utf-8"); return; }
       if (req.method === "GET" && pathname === "/plan") {
+        try { await Promise.race([shieldWarm, shutdownSignal]); } catch { send(res, 503, "Leak Gauntlet is shutting down"); return; }
         const video = await obs!.call("GetVideoSettings") as unknown as { baseWidth: number; baseHeight: number };
         send(res, 200, JSON.stringify({ cases: plan, width: video.baseWidth, height: video.baseHeight }), "application/json; charset=utf-8"); return;
       }
@@ -135,6 +143,12 @@ async function main(): Promise<void> {
 
     obs = new OBSWebSocket();
     await obs.connect(obsUrl, config.env.OBS_WS_PASSWORD);
+    // A run killed before its cleanup (power loss, kill -9) leaves its page source behind; remove it before the baseline.
+    const { inputs } = await obs.call("GetInputList", { inputKind: "browser_source" }) as unknown as { inputs: Array<{ inputName: string }> };
+    for (const { inputName } of inputs.filter((input) => /^Twitchy Leak Gauntlet \d+$/.test(input.inputName))) {
+      console.log(`Removing ${inputName} left behind by an interrupted run.`);
+      await obs.call("RemoveInput", { inputName });
+    }
     before = await inspectScenes(obs, [CONTENT, BROADCAST]);
     const masks = before[BROADCAST]?.filter((item) => /^Twitchy Mask \d+$/.test(item.sourceName)) ?? [];
     assert.equal(masks.length, config.maskPoolSize, "configured Twitchy mask pool is missing");
@@ -162,7 +176,7 @@ async function main(): Promise<void> {
     await Promise.race([
       completed,
       shutdownSignal,
-      new Promise<never>((_, reject) => { const timer = setTimeout(() => reject(new Error("Leak Gauntlet exceeded the 90 second run limit")), 90_000); timer.unref(); }),
+      new Promise<never>((_, reject) => { const timer = setTimeout(() => reject(new Error(`Leak Gauntlet exceeded its ${Math.round(runLimitMs / 1000)} s run limit`)), runLimitMs); timer.unref(); }),
     ]);
     // Let the last secret's lifetime elapse; earlier cases have already had at least this much time.
     await sleep(config.delayMs + config.safetyMarginMs + 2 * config.captureIntervalMs + 300);
@@ -180,7 +194,20 @@ async function main(): Promise<void> {
     console.log(`LEAK GAUNTLET · ${headline.blocked}/${headline.eligible} blocked · ${headline.falseAlarms} false alarms · p50 ${Math.round(headline.p50Ms)} ms · p95 ${Math.round(headline.p95Ms)} ms · every mask up before air: ${headline.everyMaskUpBeforeAir ? "YES" : "NO"}`);
     console.log(`Flash results: ${score.flash.blocked}/${score.flash.eligible} blocked`);
     if (pending.length) console.log(`Pending (detector disabled): ${pending.join(", ")}`);
-    if (score.falseAlarmLeakIds.length) console.log(`False alarm leak IDs: ${score.falseAlarmLeakIds.join(", ")}`);
+    for (const result of [...score.cases, ...score.flash.results].filter((item) => item.status === "missed")) {
+      const example = runCases.find((item) => item.id === result.id)!;
+      const leak = leaks.find((item) => item.id === result.leakId);
+      const why = !leak ? "no matching leak.detected"
+        : result.latencyMs === undefined ? "mask never seen covering it in OBS"
+          : result.latencyMs > config.delayMs ? `mask up ${Math.round(result.latencyMs)} ms after paint, after it aired`
+            : "mask came down before the case finished airing";
+      console.log(`Missed ${result.id}: ${why} (painted ${JSON.stringify(roundBox(example.region))})`);
+    }
+    for (const id of score.falseAlarmLeakIds) {
+      const leak = leaks.find((item) => item.id === id)!;
+      const showing = runCases.find((item) => leak.at >= item.paintedAt && leak.at <= item.hiddenAt);
+      console.log(`False alarm ${leak.kind} at ${JSON.stringify(roundBox(leak.box))} while ${showing?.id ?? "nothing"} was showing`);
+    }
     // Keep the final card on the browser source long enough to be visible in OBS.
     await sleep(2_500);
   } catch (error) {
