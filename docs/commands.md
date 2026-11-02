@@ -58,9 +58,24 @@ Watchlist entry added.
 - Matching ignores case, punctuation and OCR mix-ups (O/0, l/I/1) and allows a few wrong letters on longer entries. Entries of 4 characters or fewer must match exact whole words.
 - Limit: the value must sit on one line on screen. An address wrapped onto two lines isn't caught.
 
+## Plain-English rules
+
+For things that follow a format rather than one fixed value. On the dashboard, type a rule under the rules section and press Make a rule. Needs `OPENAI_API_KEY` in `.env` (restart `npm run dev` after adding it).
+
+| Example rule | What Twitchy makes |
+|---|---|
+| hide my student ID, it's the letter r followed by 7 digits | a pattern for `r` + 7 digits, shown as "your student ID" |
+| hide UPS tracking numbers | a pattern for `1Z…` tracking numbers |
+| never show my door code 4471 or my street, Kestrel Lane | two phrases, shown as "your door code and street" |
+| hide my face | refused: Twitchy can only hide text |
+
+- The rule text goes to OpenAI **once**, when you make the rule. After that it runs on your Mac on every frame, with no AI involved. For a single fixed value such as your real name, the watchlist is better: it never leaves your Mac at all.
+- Twitchy tests every rule before saving it (its own examples, ordinary stream text, regex speed) and refuses one that would mask too much.
+- Rules are saved in `twitchy.private.json`. The dashboard and overlay only see the description. Remove a rule from the dashboard. A mod's `!unblur` can dismiss a rule's mask, unlike the watchlist.
+
 ## Leak Gauntlet (proof it works)
 
-Shows 33 fake secrets, 11 decoys and 3 quick flashes on your OBS stream and scores how many were masked before they aired.
+Shows 37 fake secrets, 14 decoys and 3 quick flashes on your OBS stream and scores how many were masked before they aired.
 
 | Command | What it does |
 |---|---|

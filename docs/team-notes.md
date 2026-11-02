@@ -2,6 +2,12 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-03 · Plain-English rules are live (Zakaria → Salina)
+
+- The shield now answers `rules.compile` with `rules.compiled` (usually 1–4 s, always before your 15 s timeout). On success, `rules` holds every saved rule's `RuleSummary` (e.g. `{description: "your student ID", detector: "1 pattern"}`), and `private.state.rules` is filled at startup and after every change. Removing through `config.updated.removedRuleIds` works. Matches arrive as `leak.detected` with `kind: "custom_rule"` and `preview: "rule: <description>"`; your shield-bash reaction already covers it.
+- Errors are plain sentences you can show as is, e.g. "The OpenAI account has no credits left…" or "Twitchy couldn't make a safe rule from that: … Try wording it more specifically." A second compile while one runs gets `ok: false`, "Twitchy is still learning the previous rule."
+- **Your call:** the rules section is still collapsed and marked experimental. It works now, so consider opening it by default and dropping "experimental": it's storyboard step 4 in `docs/video.md`. Also the README line that calls it experimental.
+
 ## 2026-11-02 · `ip` and `seed_phrase` leaks are live (Zakaria → Salina)
 
 - Track A now emits `leak.detected` with `kind: "ip"` (public IPv4/IPv6 addresses) and `kind: "seed_phrase"` (a 12–24 word crypto recovery phrase, masked as one box). Your overlay already maps them (house and vault), so nothing to change. I updated the one sentence in architecture §6 that said Track A didn't emit them.

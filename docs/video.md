@@ -30,7 +30,7 @@ Everything worth saying or showing in the 3-minute video, so nothing gets forgot
    - **QR login code** (the whole code disappears)
    - phone number or credit card
    - **crypto seed phrase** ("12 words and your wallet is gone") and your **public IP** (swatting, DDoS)
-4. ~~Plain-English rule~~: **not built, cut it.**
+4. **Plain-English rule:** on the dashboard, type "hide my student ID, it's the letter r followed by 7 digits" → Make a rule → "your student ID" appears in about 2 s → open a fake student portal showing `r1021440`: masked. Use a fake ID. Say: "AI writes the rule once; it never sees the stream."
 5. **Leak Gauntlet:** `npm run gauntlet -- --seed=3` → **37/37 blocked, 0 false alarms, every mask up before air.** Put the numbers on screen.
 6. **Chat controls:** a mod types `!panic` → whole stream blacked out → `!unblur` lifts it. Viewer types `!twitchy` → Twitchy replies with the count.
 7. **How it works + built with Codex** (see below).
@@ -41,8 +41,9 @@ Everything worth saying or showing in the 3-minute video, so nothing gets forgot
 - "Once a secret airs, it's in the VOD, the clips and the screenshots. You can't take it back." (the problem)
 - "Twitchy reads your screen *before* your viewers do." (the idea in one line)
 - "One second of delay. Twitchy needs about half of it." (p95 517 ms of the 1000 ms delay)
-- "Everything runs on your Mac. No frame ever leaves your machine, and there's no AI bill." (Apple Vision OCR, regex + checks, $0 running cost)
+- "Everything runs on your Mac. No frame ever leaves your machine, and there's no AI bill." (Apple Vision OCR, regex + checks, $0 running cost; the only AI call is compiling a plain-English rule, once)
 - "Your watchlist never leaves your laptop, and not even a moderator can unmask it."
+- "Tell Twitchy what to hide in plain English. AI turns it into a rule once, Twitchy tests the rule, and from then on it runs locally on every frame."
 - "It knows the difference": decoys stay unmasked (`react@18.3.1`, `password: string`, a 16-digit order number that fails the card checksum, a name one letter off from the watchlist, `192.168.…` and `8.8.8.8`, a grocery list of seed-phrase words that fails the BIP39 checksum).
 - "We didn't just say it works, we built a test that tries to break it."
 
@@ -74,7 +75,7 @@ Show, don't tell: the Codex threads on screen (session IDs in `codex-sessions.md
 ## Don't
 
 - **Don't show anything real.** Close the real `.env`, password manager, email and DMs. Use fake keys and a fake address (the Gauntlet once read a real password from an editor left open behind it). Never show the OBS stream key.
-- Don't claim what isn't built: plain-English rules, Windows. *(Dashboard and per-leak Twitchy reactions: only if Salina has them working.)*
+- Don't claim what isn't built: Windows. *(Dashboard and per-leak Twitchy reactions: only if Salina has them working.)*
 - Don't say "blur": masks are opaque boxes.
 - Don't say "100% safe": say "37 out of 37 in our test".
 
