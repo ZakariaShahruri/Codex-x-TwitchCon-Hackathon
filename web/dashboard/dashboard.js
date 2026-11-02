@@ -120,6 +120,8 @@ function setShieldState(state) {
   $("#status-pose").setAttribute("href", `/overlay/assets/twitchy.svg#${state.status}`);
   $("#header-pose").setAttribute("href", `/overlay/assets/twitchy.svg#${state.status}`);
   $("#dashboard-mascot").dataset.state = state.status;
+  const current = { armed: "on", degraded: "on", off: "off", panic: "panic" }[state.status];
+  document.querySelectorAll(".control-buttons [data-action]").forEach((button) => button.classList.toggle("is-current", button.dataset.action === current));
   document.body.dataset.panic = String(state.status === "panic");
   if (state.status === "panic" && previousStatus !== "panic") {
     document.body.classList.remove("panic-enter");
@@ -400,7 +402,23 @@ function showCompiledRule(result) {
   $("#rule-feedback").textContent = summaries.length ? `Compiled: ${summaries.join(" · ")}` : "Compiled, but no summary was returned.";
 }
 
+const LOADING_MIN_MS = 900;
+const loadingStartedAt = performance.now();
+let loadingDone = false;
+/** Ends the skeleton state once real data arrives (or after a fallback timeout), never before LOADING_MIN_MS. */
+function finishLoading() {
+  if (loadingDone) return;
+  loadingDone = true;
+  const wait = Math.max(0, LOADING_MIN_MS - (performance.now() - loadingStartedAt));
+  setTimeout(() => {
+    document.body.classList.remove("loading");
+    document.body.classList.add("loaded");
+  }, reduceMotion() ? 0 : wait);
+}
+setTimeout(finishLoading, 2_500);
+
 function handleMessage(message) {
+  finishLoading();
   if (message?.snapshot) {
     if (message.snapshot.shieldState) setShieldState(message.snapshot.shieldState);
     if (message.snapshot.privateState) setPrivateState(message.snapshot.privateState);
@@ -420,6 +438,28 @@ function handleMessage(message) {
   }
 }
 
+/** Material-style ripple from the pointer position on every button. */
+document.addEventListener("pointerdown", (event) => {
+  const button = event.target.closest(".button, .copy-button, .text-button");
+  if (!button || reduceMotion()) return;
+  const box = button.getBoundingClientRect();
+  const size = Math.max(box.width, box.height) * 2;
+  const ripple = document.createElement("span");
+  ripple.className = "ripple";
+  ripple.style.width = ripple.style.height = `${size}px`;
+  ripple.style.left = `${event.clientX - box.left - size / 2}px`;
+  ripple.style.top = `${event.clientY - box.top - size / 2}px`;
+  button.append(ripple);
+  ripple.addEventListener("animationend", () => ripple.remove(), { once: true });
+});
+
+function flashSent(button, ok) {
+  button.classList.remove("sent", "failed");
+  void button.offsetWidth;
+  button.classList.add(ok ? "sent" : "failed");
+  button.addEventListener("animationend", (event) => { if (event.animationName === "sent-ring" || event.animationName === "failed-shake") button.classList.remove("sent", "failed"); });
+}
+
 document.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", () => {
   const action = button.dataset.action;
   if (!["on", "off", "panic", "unblur"].includes(action)) return;
@@ -431,7 +471,9 @@ document.querySelectorAll("[data-action]").forEach((button) => button.addEventLi
     mascot.classList.add(motion);
     mascot.addEventListener("animationend", () => mascot.classList.remove(motion), { once: true });
   }
-  $("#command-feedback").textContent = send("shield.command", { action, by: "dashboard", at: Date.now() }) ? `${button.textContent.trim()} sent.` : "Shield disconnected; command not sent.";
+  const sent = send("shield.command", { action, by: "dashboard", at: Date.now() });
+  flashSent(button, sent);
+  $("#command-feedback").textContent = sent ? `${button.textContent.replace(/^[^A-Za-z]+/, "").trim()} sent.` : "Shield disconnected; command not sent.";
 }));
 
 $("#obs-setup").addEventListener("click", () => {

@@ -7,7 +7,7 @@
   <title>Twitchy · Stream console</title>
   <link rel="stylesheet" href="/dashboard/dashboard.css">
 </head>
-<body>
+<body class="loading">
   <div class="shell">
     <header class="topbar">
       <a class="brand" href="/dashboard/" aria-label="Twitchy dashboard home">
@@ -37,10 +37,10 @@
         </dl>
         <div class="hero-actions">
         <div class="control-buttons">
-          <button class="button button-primary" data-action="on"><span aria-hidden="true">▶</span> Arm shield</button>
-          <button class="button button-secondary" data-action="off"><span aria-hidden="true">❚❚</span> Disarm</button>
-          <button class="button button-danger" data-action="panic"><span aria-hidden="true">■</span> Panic mask</button>
-          <button class="button button-secondary" data-action="unblur"><span aria-hidden="true">↺</span> Unblur</button>
+          <button class="button button-primary" data-action="on"><span class="button-icon" aria-hidden="true">▶</span> Arm shield</button>
+          <button class="button button-secondary" data-action="off"><span class="button-icon" aria-hidden="true">❚❚</span> Disarm</button>
+          <button class="button button-danger" data-action="panic"><span class="button-icon" aria-hidden="true">■</span> Panic mask</button>
+          <button class="button button-secondary" data-action="unblur"><span class="button-icon" aria-hidden="true">↺</span> Unblur</button>
         </div>
         <p class="hint" id="command-feedback" aria-live="polite">Commands go straight to the shield on this machine.</p>
         </div>
