@@ -29,8 +29,9 @@ Everything worth saying or showing in the 3-minute video, so nothing gets forgot
    - **home address from the watchlist** (anti-doxxing, the strongest story)
    - **QR login code** (the whole code disappears)
    - phone number or credit card
+   - **crypto seed phrase** ("12 words and your wallet is gone") and your **public IP** (swatting, DDoS)
 4. ~~Plain-English rule~~: **not built, cut it.**
-5. **Leak Gauntlet:** `npm run gauntlet -- --seed=2` → **33/33 blocked, 0 false alarms, every mask up before air.** Put the numbers on screen.
+5. **Leak Gauntlet:** `npm run gauntlet -- --seed=3` → **37/37 blocked, 0 false alarms, every mask up before air.** Put the numbers on screen.
 6. **Chat controls:** a mod types `!panic` → whole stream blacked out → `!unblur` lifts it. Viewer types `!twitchy` → Twitchy replies with the count.
 7. **How it works + built with Codex** (see below).
 8. **Outro:** "Twitchy catches leaks before your viewers ever see them."
@@ -39,20 +40,20 @@ Everything worth saying or showing in the 3-minute video, so nothing gets forgot
 
 - "Once a secret airs, it's in the VOD, the clips and the screenshots. You can't take it back." (the problem)
 - "Twitchy reads your screen *before* your viewers do." (the idea in one line)
-- "One second of delay. Twitchy needs about half of it." (p95 534 ms of the 1000 ms delay)
+- "One second of delay. Twitchy needs about half of it." (p95 517 ms of the 1000 ms delay)
 - "Everything runs on your Mac. No frame ever leaves your machine, and there's no AI bill." (Apple Vision OCR, regex + checks, $0 running cost)
 - "Your watchlist never leaves your laptop, and not even a moderator can unmask it."
-- "It knows the difference": decoys stay unmasked (`react@18.3.1`, `password: string`, a 16-digit order number that fails the card checksum, a name one letter off from the watchlist).
+- "It knows the difference": decoys stay unmasked (`react@18.3.1`, `password: string`, a 16-digit order number that fails the card checksum, a name one letter off from the watchlist, `192.168.…` and `8.8.8.8`, a grocery list of seed-phrase words that fails the BIP39 checksum).
 - "We didn't just say it works, we built a test that tries to break it."
 
 ## Numbers to show
 
 | Number | Source |
 |---|---|
-| **33/33** secrets blocked, **0** false alarms (11 decoys), **3/3** quick flashes | Gauntlet seed 2 |
-| p50 **287 ms**, p95 **534 ms** detect-to-mask, **1 s** stream delay | Gauntlet seed 2 |
-| 8 kinds of leak: API keys (OpenAI, Anthropic, Stripe, GitHub, GitLab, AWS, Google, Slack, Hugging Face, npm, JWTs, Bearer tokens), passwords, emails, phones, cards, QR codes, watchlist, fixed screen regions | `architecture.md` §5 |
-| Cards checked with issuer prefix + Luhn; watchlist fuzzy-matched against OCR mistakes | `architecture.md` §5 |
+| **37/37** secrets blocked, **0** false alarms (14 decoys), **3/3** quick flashes | Gauntlet seed 3 |
+| p50 **276 ms**, p95 **517 ms** detect-to-mask, **1 s** stream delay | Gauntlet seed 3 |
+| 10 kinds of leak: API keys (OpenAI, Anthropic, Stripe, GitHub, GitLab, AWS, Google, Slack, Hugging Face, npm, JWTs, Bearer tokens), passwords, emails, phones, cards, public IP addresses, crypto seed phrases, QR codes, watchlist, fixed screen regions | `architecture.md` §5 |
+| Cards checked with issuer prefix + Luhn; seed phrases checked with the BIP39 checksum; watchlist fuzzy-matched against OCR mistakes | `architecture.md` §5 |
 
 ## Codex part (required)
 
@@ -73,15 +74,15 @@ Show, don't tell: the Codex threads on screen (session IDs in `codex-sessions.md
 ## Don't
 
 - **Don't show anything real.** Close the real `.env`, password manager, email and DMs. Use fake keys and a fake address (the Gauntlet once read a real password from an editor left open behind it). Never show the OBS stream key.
-- Don't claim what isn't built: plain-English rules, IP addresses, seed phrases, Windows. *(Dashboard and per-leak Twitchy reactions: only if Salina has them working.)*
+- Don't claim what isn't built: plain-English rules, Windows. *(Dashboard and per-leak Twitchy reactions: only if Salina has them working.)*
 - Don't say "blur": masks are opaque boxes.
-- Don't say "100% safe": say "33 out of 33 in our test".
+- Don't say "100% safe": say "37 out of 37 in our test".
 
 ## Shots to capture
 
 - [ ] Screen recording of OBS program view (what viewers see) and, side by side, the undelayed content (what the streamer sees)
 - [ ] The Twitch channel page with the stream live and chat visible
-- [ ] Full Gauntlet run, seed 2, with the final score
+- [ ] Full Gauntlet run, seed 3, with the final score
 - [ ] `npm run watchlist -- add` with hidden input
 - [ ] Mod `!panic` / `!unblur` from a second account
 - [ ] Codex threads and the commit history

@@ -2,6 +2,11 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-02 · `ip` and `seed_phrase` leaks are live (Zakaria → Salina)
+
+- Track A now emits `leak.detected` with `kind: "ip"` (public IPv4/IPv6 addresses) and `kind: "seed_phrase"` (a 12–24 word crypto recovery phrase, masked as one box). Your overlay already maps them (house and vault), so nothing to change. I updated the one sentence in architecture §6 that said Track A didn't emit them.
+- A seed phrase counts once: a `Secret Recovery Phrase:` label no longer adds a second `api_key` leak for the same words.
+
 ## 2026-11-02 · Dashboard "Set up OBS" is live (Zakaria → Salina)
 
 - The shield now answers `obs.setup` with `obs.setupResult`. `changes` lists only what setup created or added (or `"Everything was already set up."`), then a last line with the manual step: stream `Twitchy Broadcast` and set the audio Sync Offset. A second click while setup runs gets `ok: false` with `"OBS setup is already running."` Errors never contain the OBS password. Nothing for you to change; the dashboard's `·`-joined display works as is.

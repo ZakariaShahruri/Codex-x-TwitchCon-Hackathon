@@ -65,7 +65,7 @@ Shows 33 fake secrets, 11 decoys and 3 quick flashes on your OBS stream and scor
 | Command | What it does |
 |---|---|
 | `npm run gauntlet` | Run with seed 1. Stop `npm run dev` first (both use port 4173) |
-| `npm run gauntlet -- --seed=2` | **Demo run:** 33/33 blocked, 0 false alarms |
+| `npm run gauntlet -- --seed=3` | **Demo run:** 37/37 blocked, 0 false alarms |
 | `npm run gauntlet -- --with-twitch` | Also post the saves in Twitch chat |
 
 It uses its own temporary watchlist (your real one is never touched), covers your desktop with a black backdrop while it runs, and restores OBS exactly as it was afterwards. "Blocked" means the mask was up before the frame aired and stayed until the secret was gone.
