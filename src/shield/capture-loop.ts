@@ -4,7 +4,7 @@ import OBSWebSocket from "obs-websocket-js";
 import type { Config } from "../shared/config.js";
 import type { LeakKind } from "../shared/events.js";
 import {
-  detectApiKeys, detectCards, detectEmails, detectPasswords, detectPhones, detectQrCodes, detectSensitiveRegions, detectWatchlist,
+  absorbedBySeedPhrases, detectApiKeys, detectCards, detectEmails, detectIps, detectPasswords, detectPhones, detectQrCodes, detectSeedPhrases, detectSensitiveRegions, detectWatchlist,
   type LeakCandidate,
 } from "./detectors/index.js";
 import { MaskManager, type ExistingMask } from "./mask-manager.js";
@@ -109,15 +109,18 @@ export class CaptureLoop {
       ]);
       const ocrMs = performance.now() - ocrStartedAt;
       const detectStartedAt = performance.now();
-      const leaks: LeakCandidate[] = [];
+      let leaks: LeakCandidate[] = [];
       if (enabled.has("api_key")) leaks.push(...detectApiKeys(lines));
       if (enabled.has("email")) leaks.push(...detectEmails(lines));
       if (enabled.has("password")) leaks.push(...detectPasswords(lines));
       if (enabled.has("phone")) leaks.push(...detectPhones(lines));
       if (enabled.has("card")) leaks.push(...detectCards(lines));
+      if (enabled.has("ip")) leaks.push(...detectIps(lines));
+      if (enabled.has("seed_phrase")) leaks.push(...detectSeedPhrases(lines));
       if (enabled.has("qr_code")) leaks.push(...detectQrCodes(barcodes));
       if (enabled.has("sensitive_region")) leaks.push(...detectSensitiveRegions(this.options.sensitiveRegions));
       if (enabled.has("watchlist")) leaks.push(...detectWatchlist(lines, watchlist.entries));
+      leaks = absorbedBySeedPhrases(leaks);
       const detectMs = performance.now() - detectStartedAt;
       this.previousFingerprint = fingerprint;
       this.previousLeaks = leaks;

@@ -2,21 +2,23 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Box } from "../../shared/events.js";
 import type { OCRTextLine } from "../ocr/types.js";
-import { detectApiKeys, detectCards, detectEmails, detectPasswords, detectPhones, detectQrCodes, detectSensitiveRegions, detectWatchlist } from "./index.js";
+import { detectApiKeys, detectCards, detectEmails, detectIps, detectPasswords, detectPhones, detectQrCodes, detectSeedPhrases, detectSensitiveRegions, detectWatchlist } from "./index.js";
+import { absorbedBySeedPhrases, isValidMnemonic } from "./seed-phrase.js";
 
-function line(text: string, words: string[] = text.split(/\s+/u)): OCRTextLine {
+function line(text: string, words: string[] = text.split(/\s+/u), y = 20): OCRTextLine {
   let x = 0;
   const wordBoxes = words.map((word) => {
-    const box: Box = { x, y: 20, w: word.length * 10, h: 12 };
+    const box: Box = { x, y, w: word.length * 10, h: 12 };
     x += box.w + 2;
     return { text: word, box };
   });
-  return { text, box: { x: 0, y: 20, w: x, h: 12 }, words: wordBoxes };
+  return { text, box: { x: 0, y, w: x, h: 12 }, words: wordBoxes };
 }
 
 /** Every text detector, so near-miss lists also guard the Tier 2 ones against false alarms. */
 const detectAllText = (lines: OCRTextLine[]) =>
-  [...detectApiKeys(lines), ...detectEmails(lines), ...detectPasswords(lines), ...detectPhones(lines), ...detectCards(lines)];
+  [...detectApiKeys(lines), ...detectEmails(lines), ...detectPasswords(lines), ...detectPhones(lines), ...detectCards(lines),
+    ...detectIps(lines), ...detectSeedPhrases(lines)];
 
 function assertOnlyMatchedWord(candidate: { box: Box }, word: { box: Box }): void {
   assert.deepEqual(candidate.box, word.box);
@@ -455,4 +457,120 @@ test("QR detector masks the whole code with a margin and ignores other barcodes"
   assert.deepEqual(hit.box, { x: 84, y: 84, w: 232, h: 232 });
   assert.equal(hit.fingerprint, detectQrCodes([{ ...qr, box: { x: 500, y: 50, w: 200, h: 200 } }])[0]?.fingerprint, "same payload, same leak");
   assert.notEqual(hit.fingerprint, detectQrCodes([{ ...qr, payload: "https://example.invalid/other" }])[0]?.fingerprint);
+});
+
+test("IP detector masks public IPv4 and IPv6 addresses and boxes only the address", () => {
+  for (const [text, address] of [
+    ["Your IP address is 203.0.113.42", "203.0.113.42"],
+    ["ssh root@198.51.100.7", "root@198.51.100.7"],
+    ["listening on 81.2.69.160:8080", "81.2.69.160:8080"],
+    ["IPv4:185.199.108.153", "IPv4:185.199.108.153"],
+    ["Public IPv6 2a02:6b8:b010:9020:1::2", "2a02:6b8:b010:9020:1::2"],
+    ["server 2001:db8:85a3::8a2e:370:7334.", "2001:db8:85a3::8a2e:370:7334."],
+  ]) {
+    const observation = line(text);
+    const candidates = detectIps([observation]);
+    assert.equal(candidates.length, 1, text);
+    assert.equal(candidates[0]!.kind, "ip");
+    assert.equal(candidates[0]!.preview.includes(address), false);
+    assertOnlyMatchedWord(candidates[0]!, observation.words.find((word) => word.text === address)!);
+  }
+});
+
+test("IP detector ignores private, local and well-known addresses, versions, OIDs and times", () => {
+  for (const text of [
+    "connected to 192.168.100.200:5432",
+    "10.0.0.12 gateway",
+    "172.20.4.1",
+    "localhost 127.0.0.1",
+    "link-local 169.254.12.4",
+    "CGNAT 100.72.3.9",
+    "netmask 255.255.255.0",
+    "bind 0.0.0.0:3000",
+    "dns 8.8.8.8 and 1.1.1.1",
+    "version 1.2.0.4",
+    "build 2.0.1.7",
+    "v1.4.0.2",
+    "Chrome 120.0.6099.129",
+    "oid 1.3.6.1.4.1",
+    "02.11.20.26",
+    "loopback ::1",
+    "fe80::1ff:fe23:4567:890a",
+    "fd00::1",
+    "13:45:07 INFO stream started",
+    "mac 00:1a:2b:3c:4d:5e",
+    "std::vector<int>",
+    "beef::cafe",
+  ]) assert.deepEqual(detectIps([line(text)]), [], text);
+});
+
+const VALID_12 = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+const VALID_12_B = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+const VALID_24 = `${"zoo ".repeat(23)}vote`;
+
+test("BIP39 checksum accepts the official test vectors and rejects word swaps", () => {
+  for (const phrase of [VALID_12, VALID_12_B, VALID_24, `${"abandon ".repeat(11)}about`]) assert.equal(isValidMnemonic(phrase.split(" ")), true, phrase);
+  assert.equal(isValidMnemonic("abandon ".repeat(12).trim().split(" ")), false);
+  assert.equal(isValidMnemonic(VALID_12.split(" ").reverse()), false);
+  assert.equal(isValidMnemonic(VALID_12.split(" ").slice(0, 11)), false);
+});
+
+test("seed phrase detector masks a phrase on one line, in a file and across rows", () => {
+  const single = detectSeedPhrases([line(VALID_12)]);
+  assert.equal(single.length, 1);
+  assert.equal(single[0]!.kind, "seed_phrase");
+  assert.equal(single[0]!.preview.includes("legal"), false);
+
+  const env = line(`MNEMONIC="${VALID_12_B}"`);
+  assert.equal(detectSeedPhrases([env]).length, 1);
+
+  const words = VALID_24.split(" ");
+  const rows = [0, 1, 2, 3].map((row) => line(words.slice(row * 6, row * 6 + 6).join(" "), undefined, 20 + row * 40));
+  const [grid] = detectSeedPhrases(rows);
+  assert.ok(grid);
+  assert.deepEqual([grid.box.y, grid.box.y + grid.box.h], [20, 152]);
+});
+
+test("seed phrase detector reads numbered wallet grids in number order and tolerates one unreadable cell", () => {
+  const words = VALID_12_B.split(" ");
+  // Three columns read row by row, so reading order is 1 5 9 2 6 10 …; the numbers restore the real order.
+  const rows = [0, 1, 2, 3].map((row) => {
+    const cells = [row + 1, row + 5, row + 9].flatMap((number) => [`${number}.`, words[number - 1]!]);
+    return line(cells.join(" "), cells, 20 + row * 40);
+  });
+  const [grid] = detectSeedPhrases(rows);
+  assert.ok(grid);
+  assert.equal(grid.fingerprint, detectSeedPhrases([line(VALID_12_B)])[0]!.fingerprint);
+
+  rows[0] = line("1. 5. ###### 9. cage", ["1.", "letter", "5.", "######", "9.", "cage"], 20);
+  assert.equal(detectSeedPhrases(rows).length, 1, "one unreadable cell");
+  rows[1] = line("2. ??? 6. ??? 10. advice", ["2.", "???", "6.", "???", "10.", "advice"], 60);
+  assert.equal(detectSeedPhrases(rows).length, 0, "three unreadable cells");
+});
+
+test("seed phrase detector labels lower the bar; unlabeled word lists need the checksum", () => {
+  // A grocery list of 12 wordlist words that fails the checksum.
+  const ordinary = "apple banana cherry orange lemon grape mango olive onion garlic pepper tomato";
+  assert.equal(isValidMnemonic(ordinary.split(" ")), false);
+  assert.deepEqual(detectSeedPhrases([line(ordinary)]), []);
+  assert.equal(detectSeedPhrases([line("Secret Recovery Phrase", undefined, 0), line(ordinary, undefined, 40)]).length, 1);
+});
+
+test("seed phrase detector ignores prose and numbered instructions made of common words", () => {
+  for (const lines of [
+    [line("We want to build a better world for every family and their friends, so join us today")],
+    [line("you can also use the zoo map to find the lion, the tiger and the zebra near the gate")],
+    ...[[
+      "1. Open the app", "2. Enter your email", "3. Wait for the code", "4. Copy the code", "5. Paste it here", "6. Accept the terms",
+      "7. Choose a name", "8. Pick a theme", "9. Allow access", "10. Enable alerts", "11. Invite a friend", "12. Enjoy the show",
+    ].map((text, index) => line(text, undefined, 20 + index * 30))],
+  ]) assert.deepEqual(detectSeedPhrases(lines), [], lines.map((l) => l.text).join(" / "));
+});
+
+test("a seed phrase is one leak even when its label also reads as a secret", () => {
+  const lines = [line(`Secret Recovery Phrase: ${VALID_12}`)];
+  const all = [...detectApiKeys(lines), ...detectPasswords(lines), ...detectSeedPhrases(lines)];
+  assert.deepEqual(absorbedBySeedPhrases(all).map((leak) => leak.kind), ["seed_phrase"]);
+  const email = detectEmails([line("streamer@example.invalid")]);
+  assert.deepEqual(absorbedBySeedPhrases([...email, ...detectSeedPhrases([line(VALID_12, undefined, 200)])]).map((leak) => leak.kind), ["email", "seed_phrase"]);
 });
