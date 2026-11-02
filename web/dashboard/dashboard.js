@@ -153,8 +153,7 @@ function setTwitchStatus(status, fromSnapshot = false) {
   if (!fromSnapshot && status.live === true && wasLive !== true) {
     leaks.clear();
     renderLeaks();
-    $("#report-content").hidden = true;
-    $("#report-hint").textContent = "A private summary appears when Twitch reports the stream offline.";
+    $("#report-panel").hidden = true;
   }
   if (wasLive === true && status.live === false) showReport();
 }
@@ -170,7 +169,7 @@ function renderWatchlist() {
   const list = $("#watchlist-list");
   list.replaceChildren();
   if (!savedPrivateState?.watchlist.length) {
-    list.append(emptyRow("No saved labels yet."));
+    list.append(emptyRow("No labels yet."));
     return;
   }
   for (const entry of savedPrivateState.watchlist) {
@@ -209,32 +208,23 @@ function setMetrics(metrics) {
 }
 
 function updateMetrics() {
-  const health = $("#metric-health");
   const track = $(".latency-track");
   if (!lastMetrics || Date.now() - lastMetricAt >= METRICS_STALE_MS) {
-    health.dataset.health = "none";
-    health.textContent = "No metrics";
-    resetNumber($("#hero-latency"));
-    $("#hero-latency").className = "";
     resetNumber($("#metric-p95"));
     $("#metric-budget").textContent = "—";
     resetNumber($("#metric-last"));
     resetNumber($("#metric-fps"));
     sparkSamples.length = 0;
     renderSpark(0);
-    $("#metric-updated").textContent = "No metrics yet · waiting for the shield";
+    $("#metric-updated").textContent = "Waiting for the shield…";
     track.dataset.health = "none";
     $("#latency-fill").style.width = "0%";
     return;
   }
   const { lastFrameMs, p95FrameMs, budgetMs, framesPerSec, at } = lastMetrics;
   const healthLevel = p95FrameMs > budgetMs ? "bad" : p95FrameMs >= budgetMs * .8 ? "warn" : "good";
-  health.dataset.health = healthLevel;
-  health.textContent = healthLevel === "good" ? "On budget" : healthLevel === "warn" ? "Near budget" : "Over budget";
   track.dataset.health = healthLevel;
   countTo($("#metric-p95"), p95FrameMs, { decimals: 1 });
-  countTo($("#hero-latency"), Math.round(p95FrameMs), { suffix: " ms" });
-  $("#hero-latency").className = healthLevel === "bad" ? "is-bad" : "is-good";
   $("#metric-budget").textContent = budgetMs.toFixed(0);
   countTo($("#metric-last"), lastFrameMs, { decimals: 1, duration: 400 });
   countTo($("#metric-fps"), framesPerSec, { decimals: 1, duration: 400 });
@@ -246,11 +236,10 @@ function renderLeaks(animateId) {
   const list = $("#leak-log");
   list.replaceChildren();
   const rows = [...leaks.values()].slice(-MAX_LOG_ROWS).reverse();
-  $("#leak-total").textContent = `${leaks.size} ${leaks.size === 1 ? "save" : "saves"}`;
   const heroSaves = $("#hero-saves");
-  if (Number(heroSaves.dataset.value ?? 0) !== leaks.size) { countTo(heroSaves, leaks.size, { duration: 450 }); bump(heroSaves); bump($("#leak-total")); }
+  if (Number(heroSaves.dataset.value ?? 0) !== leaks.size) { countTo(heroSaves, leaks.size, { duration: 450 }); bump(heroSaves); }
   if (!rows.length) {
-    list.append(emptyRow("When Twitchy catches something, it shows up here, redacted."));
+    list.append(emptyRow("Nothing caught yet."));
     return;
   }
   for (const leak of rows) {
@@ -293,6 +282,7 @@ function showReport() {
   const report = $("#report-content");
   report.replaceChildren();
   report.hidden = false;
+  $("#report-panel").hidden = false;
   const records = [...leaks.values()];
   const counts = new Map();
   for (const leak of records) counts.set(leak.kind, (counts.get(leak.kind) ?? 0) + 1);
@@ -321,7 +311,7 @@ function showReport() {
       item.append(icon, label, score);
       list.append(item);
     }
-  } else list.append(emptyRow("No leaks were recorded in this stream."));
+  } else list.append(emptyRow("No saves this stream."));
   const first = records.length ? Math.min(...records.map((leak) => leak.at)) : undefined;
   const last = records.length ? Math.max(...records.map((leak) => leak.at)) : undefined;
   const reportTime = Date.now();
@@ -537,7 +527,7 @@ $("#compile-rule").addEventListener("click", () => {
 function renderRules() {
   const list = $("#rule-list");
   list.replaceChildren();
-  if (!savedPrivateState?.rules.length) { list.append(emptyRow("No saved rules yet.")); return; }
+  if (!savedPrivateState?.rules.length) { list.append(emptyRow("No rules yet.")); return; }
   for (const rule of savedPrivateState.rules) {
     const row = document.createElement("li");
     row.className = "saved-item";

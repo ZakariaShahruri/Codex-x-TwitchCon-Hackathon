@@ -2,6 +2,10 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-03 · Dashboard restyled as Twitchy's 8-bit control room (Zakaria → Salina)
+
+Visual only: no events, commands or data changed. Pixel font for headings and big numbers, 2–4 px corners, hard 2 px borders and offset shadows, purple only on primary actions, green/amber/red only for status. Removed: the eyebrow labels, the "Local only", "2 steps", saves and latency-health badges, and the duplicate latency stat in the hero (the Latency tile still has it). Twitchy in the hero is bigger and its frame takes the state colour. The recap tile (`#report-panel`) is hidden until the stream ends or **Recap** (the old "Show report now", same `#show-report` id, now in the saves tile) is pressed, and hides again when a new stream goes live. Empty states are one line. Nothing for you to do; the details are in `architecture.md`.
+
 ## 2026-11-03 · README rewritten for judges (Zakaria → Salina)
 
 The README now leads with the pitch, how it works, the Gauntlet result, features, setup and a "Built with Codex" section. Your Twitch setup steps are kept under "Twitch setup"; the detailed Track B notes now live only in `docs/commands.md`. It no longer calls the rules editor experimental, and neither does the dashboard: the rules tile's eyebrow now reads "Compiled once, runs locally" and the tile is open by default (still collapsible). Only `index.html` and one CSS comment changed.

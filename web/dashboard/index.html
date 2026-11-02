@@ -26,21 +26,18 @@
     </header>
 
     <main class="bento">
-      <section class="tile tile-hero hero" aria-labelledby="hero-title">
+      <section class="tile tile-hero hero" aria-label="Shield status">
         <div class="hero-top">
           <div class="hero-state" id="shield-state" data-state="off" aria-live="polite">
             <div class="mascot-stage"><svg id="dashboard-mascot" class="status-mascot" viewBox="0 0 32 32" aria-hidden="true" shape-rendering="crispEdges"><use id="status-pose" href="/overlay/assets/twitchy.svg#off"></use></svg></div>
             <div class="state-copy">
-              <p class="eyebrow" id="hero-title">Shield status</p>
               <strong id="state-label">Off duty</strong>
               <em id="state-reason">Waiting for the shield…</em>
             </div>
           </div>
-          <span class="chip">Local only</span>
         </div>
         <dl class="hero-stats">
           <div><dt>Saves this stream</dt><dd id="hero-saves">0</dd></div>
-          <div><dt>Latency p95</dt><dd id="hero-latency">—</dd></div>
           <div><dt>Twitch</dt><dd id="hero-twitch">Checking…</dd></div>
         </dl>
         <div class="hero-actions">
@@ -55,12 +52,12 @@
       </section>
 
       <section class="tile tile-metrics metrics-panel">
-        <div class="section-heading"><div><p class="eyebrow">Live engine</p><h2>Latency</h2></div><span id="metric-health" class="health-badge" data-health="none">No metrics</span></div>
+        <div class="section-heading"><h2>Latency</h2></div>
         <div class="metric-main"><strong id="metric-p95">—</strong><span>ms p95 · budget <b id="metric-budget">—</b> ms</span></div>
         <div class="latency-track"><span id="latency-fill"></span><i></i></div>
         <div class="spark">
           <svg id="latency-spark" viewBox="0 0 300 72" preserveAspectRatio="none" role="img" aria-label="Frame time over the last 40 seconds">
-            <defs><linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9146ff" stop-opacity=".35"/><stop offset="1" stop-color="#9146ff" stop-opacity="0"/></linearGradient></defs>
+            <defs><linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#efeff1" stop-opacity=".16"/><stop offset="1" stop-color="#efeff1" stop-opacity="0"/></linearGradient></defs>
             <line class="spark-budget" x1="0" x2="300" y1="0" y2="0"/>
             <path class="spark-area" d=""/>
             <path class="spark-line" d=""/>
@@ -71,11 +68,11 @@
           <span class="spark-legend"><i></i>Frame time · <b>- -</b> budget</span>
         </div>
         <div class="metric-pairs"><div><small>Last frame</small><strong id="metric-last">—</strong><span>ms</span></div><div><small>Capture rate</small><strong id="metric-fps">—</strong><span>fps</span></div></div>
-        <p class="hint" id="metric-updated">No numbers yet. Twitchy is warming up.</p>
+        <p class="hint" id="metric-updated">Warming up…</p>
       </section>
 
       <section class="tile tile-setup setup-panel">
-        <div class="section-heading"><div><p class="eyebrow">Get ready</p><h2>Setup</h2></div><span class="step-badge">2 steps</span></div>
+        <div class="section-heading"><h2>Setup</h2></div>
         <button class="button button-secondary full" id="obs-setup"><span aria-hidden="true">▦</span> Set up OBS</button>
         <label class="field-label" for="content-scene">Content scene <span>optional</span></label>
         <input id="content-scene" maxlength="128" placeholder="Uses the scene that's live">
@@ -86,35 +83,35 @@
       </section>
 
       <section class="tile tile-leaks leaks-panel">
-        <div class="section-heading"><div><p class="eyebrow">This stream</p><h2>Twitchy's saves</h2></div><span id="leak-total" class="chip chip-accent">0 saves</span></div>
-        <ol id="leak-log" class="leak-log"><li class="empty">When Twitchy catches something, it shows up here, redacted.</li></ol>
+        <div class="section-heading"><h2>Twitchy's saves</h2><button class="text-button" id="show-report">Recap</button></div>
+        <ol id="leak-log" class="leak-log"><li class="empty">Nothing caught yet.</li></ol>
       </section>
 
       <section class="tile tile-watchlist watchlist-panel">
-        <div class="section-heading"><div><p class="eyebrow">Private to this machine</p><h2>Personal watchlist</h2></div><span class="lock-mark" aria-label="Private"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7h1zm2 0h4V5a2 2 0 0 0-4 0v2z" fill="currentColor"/></svg></span></div>
+        <div class="section-heading"><h2>Personal watchlist</h2><span class="lock-mark" aria-label="Private"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7h1zm2 0h4V5a2 2 0 0 0-4 0v2z" fill="currentColor"/></svg></span></div>
         <form id="watchlist-form" class="watchlist-form" autocomplete="off">
           <div><label class="field-label" for="watchlist-label">Label</label><input id="watchlist-label" maxlength="80" placeholder="e.g. home address" required></div>
           <div><label class="field-label" for="watchlist-value">Private value <span>hidden while typing</span></label>
           <div class="input-action"><input id="watchlist-value" type="password" maxlength="512" autocomplete="new-password" placeholder="Cleared as soon as you add it" required><button class="button button-primary" type="submit">Add</button></div></div>
         </form>
         <p class="hint" id="watchlist-feedback" aria-live="polite">Values go straight to the shield and never come back to this page.</p>
-        <ul class="saved-list" id="watchlist-list" aria-label="Saved watchlist labels"><li class="empty">No labels saved yet.</li></ul>
+        <ul class="saved-list" id="watchlist-list" aria-label="Saved watchlist labels"><li class="empty">No labels yet.</li></ul>
       </section>
 
-      <section class="tile tile-report report-panel">
-        <div class="section-heading"><div><p class="eyebrow">Stream recap</p><h2>Stream complete</h2></div><button class="text-button" id="show-report">Show report now</button></div>
-        <p class="hint" id="report-hint">When the stream ends, Twitchy sums up its saves here.</p>
+      <section class="tile tile-report report-panel" id="report-panel" hidden>
+        <div class="section-heading"><h2>Stream recap</h2></div>
+        <p class="hint" id="report-hint">Your private stream recap · previews are redacted.</p>
         <div id="report-content" class="report-content" hidden></div>
       </section>
 
       <details class="tile tile-rules rules-panel" id="rules-panel" open>
-        <summary><span><span class="eyebrow">Compiled once, runs locally</span><strong>Plain-English rules</strong><small>Describe what to hide; Twitchy compiles it into a rule once.</small></span><span class="disclosure" aria-hidden="true">+</span></summary>
+        <summary><span><strong>Plain-English rules</strong><small>Describe what to hide; Twitchy compiles it into a rule once.</small></span><span class="disclosure" aria-hidden="true"><i>+</i></span></summary>
         <div class="rules-content">
           <label class="field-label" for="rule-text">What should Twitchy watch for?</label>
           <textarea id="rule-text" maxlength="2000" rows="3" placeholder="Hide anything with my mom's name"></textarea>
           <button class="button button-secondary" id="compile-rule">Make a rule</button>
           <p class="hint" id="rule-feedback" aria-live="polite">Compiled once, so it never slows down the live shield.</p>
-          <ul class="saved-list" id="rule-list" aria-label="Saved rules"><li class="empty">No saved rules yet.</li></ul>
+          <ul class="saved-list" id="rule-list" aria-label="Saved rules"><li class="empty">No rules yet.</li></ul>
         </div>
       </details>
     </main>
