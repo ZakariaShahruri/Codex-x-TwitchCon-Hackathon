@@ -89,3 +89,34 @@ test("disarmed capture keeps the loop alive but skips OCR and detection", async 
   assert.equal(recognitionCalls, 1, "arming forces OCR even when the frame bytes have not changed");
   await loop.stop();
 });
+
+test("same-frame watchlist updates force OCR again and detect the newly added private entry", async () => {
+  let recognitionCalls = 0;
+  let revision = 0;
+  let entries: Array<{ id: string; label: string; value: string }> = [];
+  const frames: CaptureFrame[] = [];
+  const text = "Jane Doe";
+  const box = { x: 30, y: 40, w: 90, h: 16 };
+  const loop = new CaptureLoop({
+    capture: async () => Buffer.from("unchanged frame"),
+    ocr: { recognize: async () => {
+      recognitionCalls += 1;
+      return [{ text, box, words: [{ text: "Jane", box: { ...box, w: 40 } }, { text: "Doe", box: { ...box, x: 72, w: 35 } }] }];
+    } },
+    intervalMs: 100,
+    enabledDetectors: ["watchlist"],
+    sensitiveRegions: noRegions,
+    watchlist: () => ({ entries, revision }),
+    onFrame: (frame) => { frames.push(frame); },
+  });
+  await loop.tick();
+  assert.equal(frames[0]?.leaks.length, 0);
+  entries = [{ id: "private-id", label: "family member", value: "Jane Doe" }];
+  revision += 1;
+  await loop.tick();
+  assert.equal(recognitionCalls, 2);
+  assert.equal(frames[1]?.leaks[0]?.kind, "watchlist");
+  assert.equal(frames[1]?.leaks[0]?.preview, "watchlist: family member");
+  assert.equal(frames[1]?.leaks[0]?.preview.includes("Jane Doe"), false);
+  await loop.stop();
+});

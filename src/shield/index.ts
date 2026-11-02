@@ -5,6 +5,7 @@ import type { StartTrack } from "../shared/track.js";
 import { redacted, type EventMap } from "../shared/events.js";
 import { connectContentCapture, type CaptureFrame, type ContentCaptureHandle } from "./capture-loop.js";
 import { ShieldStateMachine } from "./shield-state.js";
+import { createWatchlistService } from "./watchlist/service.js";
 
 interface ActiveLeak {
   id: string;
@@ -23,6 +24,7 @@ export async function startShield(
   config: Parameters<StartTrack>[1],
   connectCapture: typeof connectContentCapture = connectContentCapture,
 ): ReturnType<StartTrack> {
+  const watchlist = await createWatchlistService(bus);
   const state = new ShieldStateMachine(config.armOnStart, (snapshot) => {
     bus.emit("shield.state", snapshot);
     console.log(`Shield state: ${snapshot.status}${snapshot.reason ? ` (${snapshot.reason})` : ""}`);
@@ -163,6 +165,7 @@ export async function startShield(
         onFrame,
         onError: onCaptureError,
         isArmed: () => state.isArmed,
+        watchlist: () => ({ entries: watchlist.entries, revision: watchlist.revision }),
       });
       if (stopping) {
         await connected.stop();
@@ -230,6 +233,7 @@ export async function startShield(
     if (stopping) return;
     stopping = true;
     bus.off("shield.command", commandListener);
+    await watchlist.stop();
     if (retryTimer) clearTimeout(retryTimer);
     clearInterval(metricsTimer);
     terminal?.close();

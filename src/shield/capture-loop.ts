@@ -3,10 +3,11 @@ import { performance } from "node:perf_hooks";
 import OBSWebSocket from "obs-websocket-js";
 import type { Config } from "../shared/config.js";
 import type { LeakKind } from "../shared/events.js";
-import { detectApiKeys, detectEmails, detectPasswords, detectSensitiveRegions, type LeakCandidate } from "./detectors/index.js";
+import { detectApiKeys, detectEmails, detectPasswords, detectSensitiveRegions, detectWatchlist, type LeakCandidate } from "./detectors/index.js";
 import { MaskManager, type ExistingMask } from "./mask-manager.js";
 import { AppleVisionOCR } from "./ocr/apple-vision.js";
 import type { OCRService } from "./ocr/types.js";
+import type { WatchlistEntry } from "./watchlist/store.js";
 
 export interface CaptureFrame {
   leaks: LeakCandidate[];
@@ -31,6 +32,7 @@ export interface CaptureLoopOptions {
   onFrame: (frame: CaptureFrame) => void | Promise<void>;
   onError?: (error: Error) => void;
   isArmed?: () => boolean;
+  watchlist?: () => { entries: readonly WatchlistEntry[]; revision: number };
 }
 
 type ManagedOCR = Pick<OCRService, "recognize"> & Partial<Pick<OCRService, "close">>;
@@ -47,6 +49,7 @@ export class CaptureLoop {
   private busy = false;
   private previousFingerprint: string | undefined;
   private previousLeaks: LeakCandidate[] = [];
+  private previousWatchlistRevision = 0;
   private wasArmed = true;
 
   constructor(private readonly options: CaptureLoopOptions) {
@@ -75,6 +78,7 @@ export class CaptureLoop {
       const capturedAt = performance.now();
       const captureMs = capturedAt - startedAt;
       const fingerprint = createHash("sha256").update(png).digest("hex");
+      const watchlist = this.options.watchlist?.() ?? { entries: [], revision: 0 };
       const at = Date.now();
       const baseTiming = { at, startedAt, capturedAt, captureMs, ocrMs: 0, detectMs: 0, totalMs: 0 };
       const armed = this.options.isArmed?.() ?? true;
@@ -82,11 +86,12 @@ export class CaptureLoop {
         const unchanged = fingerprint === this.previousFingerprint;
         this.previousFingerprint = fingerprint;
         this.previousLeaks = [];
+        this.previousWatchlistRevision = watchlist.revision;
         this.wasArmed = false;
         await this.options.onFrame({ ...baseTiming, leaks: [], unchanged, totalMs: performance.now() - startedAt });
         return true;
       }
-      if (this.wasArmed && fingerprint === this.previousFingerprint) {
+      if (this.wasArmed && fingerprint === this.previousFingerprint && watchlist.revision === this.previousWatchlistRevision) {
         await this.options.onFrame({ ...baseTiming, leaks: this.previousLeaks, unchanged: true, totalMs: performance.now() - startedAt });
         return true;
       }
@@ -102,9 +107,11 @@ export class CaptureLoop {
       if (enabled.has("email")) leaks.push(...detectEmails(lines));
       if (enabled.has("password")) leaks.push(...detectPasswords(lines));
       if (enabled.has("sensitive_region")) leaks.push(...detectSensitiveRegions(this.options.sensitiveRegions));
+      if (enabled.has("watchlist")) leaks.push(...detectWatchlist(lines, watchlist.entries));
       const detectMs = performance.now() - detectStartedAt;
       this.previousFingerprint = fingerprint;
       this.previousLeaks = leaks;
+      this.previousWatchlistRevision = watchlist.revision;
       await this.options.onFrame({ ...baseTiming, leaks, unchanged: false, ocrMs, detectMs, totalMs: performance.now() - startedAt });
       return true;
     } catch (error) {
@@ -121,6 +128,7 @@ export async function connectContentCapture(config: Config, options: {
   onFrame: CaptureLoopOptions["onFrame"];
   onError?: CaptureLoopOptions["onError"];
   isArmed?: () => boolean;
+  watchlist?: CaptureLoopOptions["watchlist"];
   ocr?: ManagedOCR;
 }): Promise<ContentCaptureHandle> {
   const url = config.env.OBS_WS_URL;
@@ -236,6 +244,7 @@ export async function connectContentCapture(config: Config, options: {
       enabledDetectors: config.enabledDetectors,
       sensitiveRegions: config.sensitiveRegions,
       isArmed: options.isArmed,
+      watchlist: options.watchlist,
       onFrame: async (frame) => {
         for (const candidate of frame.leaks) {
           if (!pendingLeaks.has(candidate.fingerprint)) pendingLeaks.set(candidate.fingerprint, { candidate, firstSeenAt: frame.capturedAt });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Box } from "../../shared/events.js";
 import type { OCRTextLine } from "../ocr/types.js";
-import { detectApiKeys, detectEmails, detectPasswords, detectSensitiveRegions } from "./index.js";
+import { detectApiKeys, detectEmails, detectPasswords, detectSensitiveRegions, detectWatchlist } from "./index.js";
 
 function line(text: string, words: string[] = text.split(/\s+/u)): OCRTextLine {
   let x = 0;
@@ -130,6 +130,58 @@ test("a URL credential is a password, not an email address", () => {
     assert.equal(detectPasswords([line(text)]).length, 1, text);
   }
   assert.equal(detectEmails([line("mailto: demo.person@example.invalid")]).length, 1);
+});
+
+test("watchlist matches whole short words and OCR-normalized multiword values", () => {
+  const short = { id: "short", label: "robot", value: "R2D2" };
+  const exactWord = line("message: R2-D2 arrived", ["message:", "R2-D2", "arrived"]);
+  const [shortHit] = detectWatchlist([exactWord], [short]);
+  assert.ok(shortHit);
+  assert.equal(shortHit.preview, "watchlist: robot");
+  assert.equal(shortHit.preview.includes(short.value), false);
+  assertOnlyMatchedWord(shortHit, exactWord.words[1]!);
+  assert.equal(detectWatchlist([line("R2D2X")], [short]).length, 0, "short values require an exact whole word");
+  assert.equal(detectWatchlist([line("R2D2")], [{ id: "tiny", label: "unit", value: "R2D" }]).length, 0);
+
+  const person = { id: "person", label: "family member", value: "Jane Doe" };
+  const ocrVariant = line("DM: Jäne D0e joined", ["DM:", "Jäne", "D0e", "joined"]);
+  const [personHit] = detectWatchlist([ocrVariant], [person]);
+  assert.ok(personHit);
+  assert.deepEqual(personHit.box, {
+    x: ocrVariant.words[1]!.box.x, y: 20,
+    w: ocrVariant.words[1]!.box.w + 2 + ocrVariant.words[2]!.box.w, h: 12,
+  });
+  assert.equal(personHit.fingerprint, detectWatchlist([line("Jane Doe")], [person])[0]?.fingerprint);
+});
+
+test("watchlist handles a scaled typo tolerance and same-row OCR fragments without masking neighbors", () => {
+  const address = { id: "address", label: "home address", value: "742 Evergreen Terrace Apartment 5B" };
+  const first = fragment("742 Evergreem", 120, 383);
+  const second = fragment("Terrace Apartment 5B", first.box.x + first.box.w + 14, 385);
+  const note = fragment("meeting tomorrow", second.box.x + second.box.w + 14, 383);
+  const [hit] = detectWatchlist([note, second, first], [address]);
+  assert.ok(hit);
+  assert.equal(hit.kind, "watchlist");
+  assert.equal(hit.preview, "watchlist: home address");
+  assert.equal(hit.box.x, first.box.x);
+  assert.equal(hit.box.x + hit.box.w, second.box.x + second.box.w);
+  assert.ok(hit.box.x + hit.box.w < note.box.x);
+
+  const exact = { id: "street", label: "home", value: "742 Evergreen Terrace" };
+  const label = fragment("742 Evergreen", 120, 483);
+  const value = fragment("Terrace", label.box.x + label.box.w + 14, 485);
+  assert.equal(detectWatchlist([value, label], [exact]).length, 1, "same-row fragments join into one OCR line");
+  assert.equal(detectWatchlist([label, fragment("Terrace", 120, 530)], [exact]).length, 0, "separate rows do not join");
+});
+
+test("watchlist near-miss names do not fuzzy-match short or ordinary similar names", () => {
+  const entries = [
+    { id: "person", label: "family", value: "Jane Doe" },
+    { id: "address", label: "home", value: "742 Evergreen Terrace" },
+    { id: "name", label: "contact", value: "Alexandra Montgomery" },
+  ];
+  const nearMisses = ["Jane Dole", "Jane Do", "742 Evergreen Terraceway", "Alexandria Montgomery", "Alexandra Monastery"];
+  for (const text of nearMisses) assert.deepEqual(detectWatchlist([line(text)], entries), [], text);
 });
 
 test("detectors catch common real-world secrets", () => {

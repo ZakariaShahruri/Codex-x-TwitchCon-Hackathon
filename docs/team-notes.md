@@ -2,6 +2,11 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-02 · Personal watchlist storage (Zakaria → Salina)
+
+- Track A now consumes the existing `config.updated.watchlist` add/remove payload, stores values only in gitignored `twitchy.private.json`, and emits `private.state` with IDs and labels only at startup and after updates. Watchlist leak previews are `watchlist: <label>`; labels containing any part of a stored value are rejected to keep previews safe.
+- The dashboard can send the current shared contract; no event shapes changed. `npm run watchlist -- add|list|remove <id>` manages entries before the dashboard is ready. Add prompts with hidden input; never pass a value as an argument.
+
 ## 2026-11-02 · Twitch chat commands and lifecycle events (Salina → Zakaria)
 
 - Broadcaster/moderator chat commands emit `shield.command` with the sender login in `by`; unauthorized viewers' moderation commands are silently ignored. `!twitchy` is open to everyone and reports blocked leaks plus current shield status.

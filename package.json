@@ -11,6 +11,7 @@
     "dev:commands": "TWITCHY_DEV_COMMANDS=1 tsx src/index.ts",
     "demo:events": "tsx src/web/demo-events.ts",
     "obs:setup": "tsx scripts/obs-setup.ts",
+    "watchlist": "tsx scripts/watchlist.ts",
     "pregauntlet": "npm run ocr:build",
     "gauntlet": "tsx scripts/gauntlet.ts",
     "ocr:build": "node scripts/build-ocr-vision.mjs",
