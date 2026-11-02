@@ -124,14 +124,14 @@ test("handler saves the rule privately, publishes only its summary, and removal 
   const bus = new EventBus();
   const compiled: Array<EventMap["rules.compiled"]> = [];
   const states: Array<EventMap["private.state"]> = [];
-  bus.on("rules.compiled", (payload) => { compiled.push(payload); });
+  const answered = new Promise<void>((resolve) => bus.on("rules.compiled", (payload) => { compiled.push(payload); resolve(); }));
   bus.on("private.state", (payload) => { states.push(payload); });
   const service = await createWatchlistService(bus, file);
   const config = await loadConfig({ envPath: "/missing/twitchy-test.env" });
   const stop = listenForRuleCompiles(bus, config, service, async () => validateDraft(momRule));
   try {
     bus.emit("rules.compile", { requestId: "req-1", text: "hide my mom's name, Rosalind Achterberg" });
-    for (let tick = 0; tick < 100 && !compiled.length; tick += 1) await new Promise((resolve) => setImmediate(resolve));
+    await answered;
     assert.equal(compiled[0]?.ok, true);
     assert.deepEqual(compiled[0]?.rules?.map(({ description, detector }) => ({ description, detector })), [{ description: "your mom's name", detector: "2 phrases" }]);
     assert.equal(service.rules.length, 1);
