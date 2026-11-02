@@ -93,6 +93,41 @@ test("OCR readings of the same secret share one fingerprint; different secrets d
   assert.notEqual(other, fingerprints[0]);
 });
 
+function fragment(text: string, x: number, y: number, h = 24): OCRTextLine {
+  const box: Box = { x, y, w: Math.round(text.length * h * 0.6), h };
+  return { text, box, words: [{ text, box }] };
+}
+
+test("live Leak Gauntlet OCR damage still detects the secret", () => {
+  // Exact Vision readings from the first live Gauntlet run: `l`/`I` read as `|` in a proportional font,
+  // and `3` read as Cyrillic `З`.
+  const jwt = `${"eyJ"}hbGciOiJlUz|1NiJ9.eyJzdWliOiJnYXVudGxldCJ9.AExpEN2Xuy7_P67|t8SPMEVTcanN3fnpyuFFLpMOTWu`;
+  assert.equal(detectApiKeys([line(jwt)]).length, 1);
+  assert.equal(detectApiKeys([line(jwt)])[0]?.fingerprint, detectApiKeys([line(jwt.replace(/\|/g, "l"))])[0]?.fingerprint);
+  assert.equal(detectApiKeys([line(`$ ${"ghu_"}wЗI6xmI80s0aCzTtDly4dc0MGKCnQyxBQNCv`)]).length, 1);
+});
+
+test("same-row OCR fragments join, other rows and distant columns do not", () => {
+  // Vision returned `password:` and its value as two lines on one row.
+  const label = fragment("password:", 120, 383);
+  const value = fragment("Gauntlet-XiMCDn2Jxx", label.box.x + label.box.w + 14, 385);
+  const [hit] = detectPasswords([value, label]);
+  assert.ok(hit);
+  assert.deepEqual(hit.box, value.box);
+
+  assert.equal(detectPasswords([label, fragment("Gauntlet-XiMCDn2Jxx", 120, 430)]).length, 0, "next row");
+  assert.equal(detectPasswords([label, fragment("Gauntlet-XiMCDn2Jxx", label.box.x + label.box.w + 400, 383)]).length, 0, "far column");
+  assert.equal(detectPasswords([label, fragment("Gauntlet-XiMCDn2Jxx", label.box.x + label.box.w + 14, 383, 60)]).length, 0, "different size");
+});
+
+test("a URL credential is a password, not an email address", () => {
+  for (const text of ["DATABASE_URL=postgres://demo:Gauntlet-vGH3rqgn3N@db.invalid/app", "postgres://demo: Gauntlet-vGH3rqgn3N@db.invalid/app"]) {
+    assert.equal(detectEmails([line(text)]).length, 0, text);
+    assert.equal(detectPasswords([line(text)]).length, 1, text);
+  }
+  assert.equal(detectEmails([line("mailto: demo.person@example.invalid")]).length, 1);
+});
+
 test("detectors catch common real-world secrets", () => {
   const secrets = [
     "DATABASE_URL=postgres://demo:FakePassword123@localhost:5432/app",
@@ -123,6 +158,8 @@ test("detectors catch common real-world secrets", () => {
     "xoxa-AbCdEfGhIjKlMnOpQrStUv",
     "TWITCH_BOT_TOKEN=oauth: fake-twitch-token-abcdef0123456789",
     "contact: john.doe@gmail.com",
+    // Real JWTs are lowercase-heavy base64url; a bare one in a log line has no label to lean on.
+    `session restored from ${"eyJ"}hbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U`,
   ];
   for (const text of secrets) {
     const lines = [line(text)];

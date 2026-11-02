@@ -10,11 +10,14 @@ function isNotAnAddress(match: string): boolean {
   return /^git@/i.test(match) || /@\d+(?:\.\d+)?x\./i.test(match);
 }
 
+/** `user:password@host` in a URL is a password (the password detector masks it), not an address. */
+const URL_USERINFO_BEFORE = /[A-Z][A-Z0-9+.-]*:\/\/[^\s/@]*:\s*$/i;
+
 export function detectEmails(lines: readonly OCRTextLine[]): LeakCandidate[] {
   return lines.flatMap((line) => {
     const ranges: TextRange[] = [];
     for (const match of line.text.matchAll(EMAIL)) {
-      if (match.index === undefined || isNotAnAddress(match[0])) continue;
+      if (match.index === undefined || isNotAnAddress(match[0]) || URL_USERINFO_BEFORE.test(line.text.slice(0, match.index))) continue;
       const range = originalRangeToCompact(line.text, match.index, match.index + match[0].length);
       if (range) ranges.push(range);
     }

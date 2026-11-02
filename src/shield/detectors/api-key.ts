@@ -13,7 +13,7 @@ const PREFIX_PATTERNS: RegExp[] = [
   /xox[abprs]-[A-Z0-9-]{20,}/gi,
   /hf_[A-Z0-9]{30,}/gi,
   /npm_[A-Z0-9]{36,}/gi,
-  /eyJ[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}(?![A-Z0-9_-])/g,
+  /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?![A-Za-z0-9_-])/g,
 ];
 
 const CREDENTIAL_ASSIGNMENT = /([A-Z][A-Z0-9_-]{0,63})["']?[:=]["']?([A-Z0-9~._:/+@=-]{16,})/gi;
@@ -41,8 +41,11 @@ function looksLikeHighEntropyCredential(value: string): boolean {
   return value.length >= 24 && new Set(value).size >= 12 && entropy(value) >= 3.45;
 }
 
+/** Vision reads `l`/`I` as `|` in proportional fonts; no token contains `|`, so it is read back as `l` (same length). */
+const tokenText = (text: string): string => text.replace(/\|/g, "l");
+
 function findRanges(line: OCRTextLine): TextRange[] {
-  const compact = compactText(line.text);
+  const compact = compactText(tokenText(line.text));
   const ranges: TextRange[] = [];
   for (const pattern of PREFIX_PATTERNS) {
     for (const match of compact.text.matchAll(pattern)) {
@@ -64,7 +67,7 @@ function findRanges(line: OCRTextLine): TextRange[] {
     ranges.push({ start: valueStart, end: valueStart + match[2].length });
   }
 
-  for (const match of line.text.matchAll(BEARER)) {
+  for (const match of tokenText(line.text).matchAll(BEARER)) {
     const token = match[1];
     if (!token || match.index === undefined || !looksLikeHighEntropyCredential(token)) continue;
     const start = match.index + match[0].lastIndexOf(token);
