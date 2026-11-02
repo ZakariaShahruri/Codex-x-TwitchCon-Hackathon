@@ -254,6 +254,21 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .saved-list, .leak-log { margin: 14px 0 0; padding: 0; overflow: auto; list-style: none; }
 .saved-list { max-height: 200px; }
 .leak-log { flex: 1; min-height: 0; max-height: 520px; margin-top: 0; padding-right: 4px; }
+
+/* Scroll fade (after skiper-ui's skiper87): a list fades at an edge only while there's more to scroll that way. Pure CSS,
+   driven by the list's own scroll position; a list that fits doesn't fade, and browsers without scroll timelines just scroll. */
+@property --fade-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes fade-top-in { from { --fade-top: 0px; } to { --fade-top: 40px; } }
+@keyframes fade-bottom-out { from { --fade-bottom: 40px; } to { --fade-bottom: 0px; } }
+@supports (animation-timeline: scroll()) {
+  .saved-list, .leak-log {
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
+    animation: fade-top-in linear both, fade-bottom-out linear both;
+    animation-timeline: scroll(self);
+    animation-range: 0px 60px, calc(100% - 60px) 100%;
+  }
+}
 .saved-item, .leak-item { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); }
 .saved-item { justify-content: space-between; }
 .saved-item strong { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }

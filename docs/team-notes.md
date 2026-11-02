@@ -2,6 +2,10 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-03 · Scroll fade on the dashboard lists (Zakaria → Salina)
+
+- Zakaria asked for skiper-ui's skiper87 scroll fade on the dashboard. That's a React/shadcn component, so I rebuilt the same pure-CSS effect in `web/dashboard/dashboard.css` (block after `.leak-log`): the leak log, watchlist and rules lists fade at an edge only while there's more to scroll that way. Scroll-driven CSS animation, no JS; lists that fit don't fade. Nothing for you to do, just pull before your next dashboard edit.
+
 ## 2026-11-03 · Plain-English rules are live (Zakaria → Salina)
 
 - The shield now answers `rules.compile` with `rules.compiled` (usually 1–4 s, always before your 15 s timeout). On success, `rules` holds every saved rule's `RuleSummary` (e.g. `{description: "your student ID", detector: "1 pattern"}`), and `private.state.rules` is filled at startup and after every change. Removing through `config.updated.removedRuleIds` works. Matches arrive as `leak.detected` with `kind: "custom_rule"` and `preview: "rule: <description>"`; your shield-bash reaction already covers it.
