@@ -2,17 +2,24 @@ import type { OCRTextLine } from "../ocr/types.js";
 import { candidatesForRanges, compactText, normalizeLabel, originalRangeToCompact } from "./text.js";
 import type { LeakCandidate, TextRange } from "./types.js";
 
+/**
+ * Token body after a provider prefix. A real key is ASCII, so a non-ASCII character inside one is OCR junk
+ * (seen live: `M` read as `™`); the prefix is specific enough to accept it.
+ */
+const body = (ascii: string, length: string): string => `(?:${ascii}|[^\\x00-\\x7F]){${length}}`;
+const prefixed = (prefix: string, ascii: string, length: string): RegExp => new RegExp(`${prefix}${body(ascii, length)}`, "gi");
+
 const PREFIX_PATTERNS: RegExp[] = [
-  /sk-(?:proj-|ant-)?[A-Z0-9_-]{20,}/gi,
-  /(?:sk|rk)_(?:live|test)_[A-Z0-9]{16,}/gi,
-  /gh[opsur]_[A-Z0-9]{20,}/gi,
-  /github_pat_[A-Z0-9_]{20,}/gi,
-  /glpat-[A-Z0-9_-]{20,}/gi,
+  prefixed("sk-(?:proj-|ant-)?", "[A-Z0-9_-]", "20,"),
+  prefixed("(?:sk|rk)_(?:live|test)_", "[A-Z0-9]", "16,"),
+  prefixed("gh[opsur]_", "[A-Z0-9]", "20,"),
+  prefixed("github_pat_", "[A-Z0-9_]", "20,"),
+  prefixed("glpat-", "[A-Z0-9_-]", "20,"),
   /AKIA[A-Z0-9]{16}(?![A-Z0-9])/gi,
   /A[I1l]za[A-Z0-9_-]{35}/gi, // Vision reads the `I` as `l` or `1`
-  /xox[abprs]-[A-Z0-9-]{20,}/gi,
-  /hf_[A-Z0-9]{30,}/gi,
-  /npm_[A-Z0-9]{36,}/gi,
+  prefixed("xox[abprs]-", "[A-Z0-9-]", "20,"),
+  prefixed("hf_", "[A-Z0-9]", "30,"),
+  prefixed("npm_", "[A-Z0-9]", "36,"),
   /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?![A-Za-z0-9_-])/g,
 ];
 

@@ -119,6 +119,8 @@ test("live Leak Gauntlet OCR damage still detects the secret", () => {
   assert.equal(detectApiKeys([line(`${"sk"} live 51HxYzAbCdEfGhIjKlMnOpQrSt`)]).length, 1);
   assert.equal(detectApiKeys([line("SERVICE_TOKEN=Gm1gGc66ExD8qoqvcYQ]P9QS1zcC7fuDsPRc")]).length, 1);
   assert.equal(detectApiKeys([line("const first = items[0] ?? fallback")]).length, 0);
+  assert.equal(detectApiKeys([line(`${"ghp"}_GvugN™MWJZ8LPOwvYLyYZJChCiCvEyW14xо0`)]).length, 1, "`M` read as `™`");
+  assert.equal(detectApiKeys([line("café résumé naïve façade über straße")]).length, 0);
 });
 
 test("same-row OCR fragments join, other rows and distant columns do not", () => {
