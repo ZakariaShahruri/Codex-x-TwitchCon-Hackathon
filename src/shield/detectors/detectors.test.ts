@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Box } from "../../shared/events.js";
 import type { OCRTextLine } from "../ocr/types.js";
-import { detectApiKeys, detectEmails, detectPasswords, detectSensitiveRegions, detectWatchlist } from "./index.js";
+import { detectApiKeys, detectCards, detectEmails, detectPasswords, detectPhones, detectQrCodes, detectSensitiveRegions, detectWatchlist } from "./index.js";
 
 function line(text: string, words: string[] = text.split(/\s+/u)): OCRTextLine {
   let x = 0;
@@ -13,6 +13,10 @@ function line(text: string, words: string[] = text.split(/\s+/u)): OCRTextLine {
   });
   return { text, box: { x: 0, y: 20, w: x, h: 12 }, words: wordBoxes };
 }
+
+/** Every text detector, so near-miss lists also guard the Tier 2 ones against false alarms. */
+const detectAllText = (lines: OCRTextLine[]) =>
+  [...detectApiKeys(lines), ...detectEmails(lines), ...detectPasswords(lines), ...detectPhones(lines), ...detectCards(lines)];
 
 function assertOnlyMatchedWord(candidate: { box: Box }, word: { box: Box }): void {
   assert.deepEqual(candidate.box, word.box);
@@ -261,7 +265,7 @@ test("detectors avoid prose, code references, versions and placeholders", () => 
   ];
   for (const text of nearMisses) {
     const lines = [line(text)];
-    assert.deepEqual([...detectApiKeys(lines), ...detectEmails(lines), ...detectPasswords(lines)], [], text);
+    assert.deepEqual(detectAllText(lines), [], text);
   }
 });
 
@@ -341,7 +345,7 @@ test("adversarial streamer-screen corpus covers formats, tooling, code and OCR d
   const knownFalseNegatives: string[] = [];
   for (const item of cases) {
     const observations = item.lines.map((text, index) => line(text, item.words?.[index]));
-    const leaks = [...detectApiKeys(observations), ...detectEmails(observations), ...detectPasswords(observations)];
+    const leaks = detectAllText(observations);
     if (item.knownFalseNegative && leaks.length === 0) {
       knownFalseNegatives.push(`${item.group}: ${item.name}`);
       continue;
@@ -352,4 +356,95 @@ test("adversarial streamer-screen corpus covers formats, tooling, code and OCR d
   for (const item of knownFalseNegatives) console.log(`[detector corpus] KNOWN FALSE NEGATIVE: ${item}`);
   assert.deepEqual(knownFalseNegatives, ["OCR wrap: API key wraps after prefix", "OCR wrap: email wraps across rendered lines"]);
   assert.deepEqual(failures, []);
+});
+
+test("phone detector catches real formats and boxes only the number", () => {
+  const hits = [
+    "+44 20 7946 0958",
+    "+1 (555) 010-4477",
+    "Call me at (555) 010-4477 tonight",
+    "555-010-4477",
+    "555.010.4477",
+    "+33 6 12 34 56 78",
+    "Mobile: 06 12 34 56 78",
+    "tel=0612345678",
+    "WhatsApp: +49 151 23456789",
+    "my number is +1 555 010 4477 or 2026",
+    "PHONE_NUMBER=+61 2 5550 1234",
+  ];
+  for (const text of hits) assert.equal(detectPhones([line(text)]).length, 1, text);
+
+  const observation = line("call +44 20 7946 0958 now");
+  const [hit] = detectPhones([observation]);
+  assert.ok(hit);
+  assert.equal(hit.preview, "phone number");
+  assert.deepEqual(hit.box, { x: observation.words[1]!.box.x, y: 20, w: observation.words[4]!.box.x + observation.words[4]!.box.w - observation.words[1]!.box.x, h: 12 });
+  assert.equal(detectPhones([line("+1 (555) 010-4477")])[0]?.fingerprint, detectPhones([line("+1 555 010 4477")])[0]?.fingerprint);
+});
+
+test("phone detector ignores dates, times, versions, IPs, IDs and durations", () => {
+  const nearMisses = [
+    "2026-11-02 13:45:07",
+    "12:30:45.123",
+    "192.168.100.200",
+    "10.0.0.1:5432",
+    "v18.3.1",
+    "Order #555-010-4477",
+    "ticket INC-555-010-4477",
+    "duration 00:12:34",
+    "1730532000000",
+    "request_id=550e8400-e29b-41d4-a716-446655440000",
+    "555-0100",
+    "ISBN 978-3-16-148410-0",
+    "11/02/2026",
+    "+15 XP",
+    "v555.010.4477",
+    "555-010-4477-2",
+    "Build 2024.11.02.1234",
+  ];
+  for (const text of nearMisses) assert.deepEqual(detectPhones([line(text)]), [], text);
+});
+
+test("card detector needs an issuer prefix, a valid length and a Luhn check", () => {
+  const hits = [
+    "4242 4242 4242 4242",
+    "4242424242424242",
+    "5555-5555-5555-4444",
+    "3782 822463 10005",
+    "6011 1111 1111 1117",
+    "card: 4000056655665556",
+    "4242 4242 4242 4242 12/28 123",
+    "4242 4242 4242 4242 12",
+    "2223 0031 2200 3222",
+  ];
+  for (const text of hits) assert.equal(detectCards([line(text)]).length, 1, text);
+  const [hit] = detectCards([line("Visa 4242 4242 4242 4242 exp 12/28")]);
+  assert.equal(hit?.preview, "credit card");
+
+  const nearMisses = [
+    "4242 4242 4242 4241",
+    "1234 5678 9012 3456",
+    "9999 9999 9999 9995",
+    "1730532000000",
+    "0000 0000 0000 0000",
+    "4111-1111 1111-1111",
+    "3.14159265358979323",
+    "+44 20 7946 0958",
+    "GB82 WEST 1234 5698 7654 32",
+    "4444 4444 4444 4444",
+    "order 4417229011853006",
+  ];
+  for (const text of nearMisses) assert.deepEqual(detectCards([line(text)]), [], text);
+});
+
+test("QR detector masks the whole code with a margin and ignores other barcodes", () => {
+  const qr = { payload: "otpauth://totp/Twitch:demo?secret=FAKE", symbology: "VNBarcodeSymbology(_rawValue: VNBarcodeSymbologyQR)", box: { x: 100, y: 100, w: 200, h: 200 } };
+  const [hit] = detectQrCodes([qr, { payload: "4006381333931", symbology: "VNBarcodeSymbologyEAN13", box: { x: 0, y: 0, w: 90, h: 40 } }]);
+  assert.ok(hit);
+  assert.equal(detectQrCodes([qr]).length, 1);
+  assert.equal(hit.kind, "qr_code");
+  assert.equal(hit.preview, "QR code");
+  assert.deepEqual(hit.box, { x: 84, y: 84, w: 232, h: 232 });
+  assert.equal(hit.fingerprint, detectQrCodes([{ ...qr, box: { x: 500, y: 50, w: 200, h: 200 } }])[0]?.fingerprint, "same payload, same leak");
+  assert.notEqual(hit.fingerprint, detectQrCodes([{ ...qr, payload: "https://example.invalid/other" }])[0]?.fingerprint);
 });
