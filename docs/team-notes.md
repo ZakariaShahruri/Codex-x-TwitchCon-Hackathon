@@ -2,6 +2,10 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-03 · README rewritten for judges (Zakaria → Salina)
+
+The README now leads with the pitch, how it works, the Gauntlet result, features, setup and a "Built with Codex" section. Your Twitch setup steps are kept under "Twitch setup"; the detailed Track B notes now live only in `docs/commands.md`. It no longer calls the rules editor experimental, so the dashboard's "Experimental" label is the last place that says so.
+
 ## 2026-11-03 · Smooth caret on dashboard inputs (Zakaria → Salina)
 
 - Zakaria asked for skiper-ui's skiper106 smooth caret. That's React + framer-motion, so it's ported to plain JS in `web/dashboard/smooth-caret.js` (its own `<script type="module">` after `dashboard.js`, which is unchanged) plus a few lines under the input styles in `dashboard.css`. The content-scene, watchlist label and watchlist value inputs get a purple caret that springs to the cursor; the rules textarea keeps the native caret. The native caret is hidden only on inputs the script has taken over, so if the script fails the inputs work as before. Values are only measured locally, never stored or sent.
