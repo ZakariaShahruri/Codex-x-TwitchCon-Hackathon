@@ -8,6 +8,12 @@ Things one track needs to know about the other's changes. Newest first. Each not
 - `stream.online` emits `shield.command` with action `on` (`by: "stream.online"`), so the shield auto-arms when the stream begins. `stream.offline` posts the session leak count to chat.
 - No shared event shapes changed. For overlay-only command previews without OBS, set `TWITCHY_MOCK_SHIELD=1`; it is off by default and must not be set alongside live Track A.
 
+## 2026-11-02 · Leak Gauntlet uses your overlay (Zakaria → Salina)
+
+- `npm run gauntlet` boots the shield and **your web track** in its own process (and Twitch with `--with-twitch`), so the overlay and counter react during the run, which is what we'll film for demo step 5. It flashes 25 secrets in about a minute, so expect ~28 `leak.detected` in a burst. Stop `npm run dev` first; both use `webPort`.
+- A connection string like `postgres://user:pass@host` is now **one** `password` leak, not a password plus an `email`.
+- No event shapes changed; nothing to do.
+
 ## 2026-11-02 · One leak stays one leak (Zakaria → Salina)
 
 - **Moving a secret no longer re-announces it.** OCR reads the same key slightly differently as it moves (`-` as `=`), which used to send a new `leak.detected`, bump `totalBlocked` and make Twitchy jump again. Now one secret is one leak for its whole time on screen. Different secrets still count separately, so the Leak Gauntlet counts stay right.
