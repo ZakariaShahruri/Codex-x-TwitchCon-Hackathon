@@ -16,15 +16,15 @@
 /* One palette for the whole page. Body text on a tile is ≥ 7:1, muted text ≥ 4.5:1. */
 :root {
   color-scheme: dark;
-  --bg: #1f1f23;
-  --tile: #2b2b31;
-  --tile-raised: #2b2b31;
-  --tile-inset: #232328;
-  --border: #3d3d44;
-  --border-strong: #53535f;
-  --text: #efeff1;
-  --muted: #b8b8c2;
-  --faint: #9a9aa6;
+  --bg: #123029;
+  --tile: #1a3d35;
+  --tile-raised: #1a3d35;
+  --tile-inset: #14332c;
+  --border: #2a5a4f;
+  --border-strong: #3a7264;
+  --text: #f0faf6;
+  --muted: #b9dbd1;
+  --faint: #93c2b5;
   --purple: #9146ff;
   --purple-hover: #772ce8;
   --purple-soft: #bf94ff;
@@ -200,7 +200,7 @@ h2 { margin: 0; color: var(--text); font-size: 20px; font-weight: 700; letter-sp
 .button-primary { color: #fff; background: var(--purple); }
 .button-primary:hover { background: var(--purple-hover); }
 .button-secondary { color: var(--text); background: var(--tile-inset); border-color: var(--border-strong); }
-.button-secondary:hover { border-color: var(--faint); background: #34343b; }
+.button-secondary:hover { border-color: var(--faint); background: #21483f; }
 .button-danger { color: #fff; background: var(--danger); }
 .button-danger:hover { background: var(--danger-hover); }
 .full { width: 100%; }
