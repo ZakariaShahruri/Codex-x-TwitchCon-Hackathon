@@ -5,6 +5,7 @@ import { EventBus } from "../src/shared/bus.js";
 import { loadConfig } from "../src/shared/config.js";
 import { connectContentCapture, type CaptureFrame } from "../src/shield/capture-loop.js";
 import { startShield } from "../src/shield/index.js";
+import { briefScenes, inspectScenes, restoreItemTransform } from "./obs-helpers.js";
 
 const CONTENT = "Twitchy Content";
 const BROADCAST = "Twitchy Broadcast";
@@ -14,29 +15,13 @@ const backdropName = `Twitchy Live E2E backdrop ${process.pid}`;
 const fixture = resolve("tools/ocr-vision/fixtures/fake-env-1080p-12px.png");
 const sleep = (ms: number) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 
-async function inspect(obs: OBSWebSocket): Promise<Record<string, any[]>> {
-  const result: Record<string, any[]> = {};
-  for (const sceneName of [CONTENT, BROADCAST]) {
-    const { sceneItems } = await obs.call("GetSceneItemList", { sceneName });
-    result[sceneName] = await Promise.all(sceneItems.map(async (item) => ({
-      sourceName: item.sourceName, sceneItemId: item.sceneItemId, sceneItemIndex: item.sceneItemIndex,
-      sceneItemEnabled: item.sceneItemEnabled,
-      transform: (await obs.call("GetSceneItemTransform", { sceneName, sceneItemId: item.sceneItemId })).sceneItemTransform,
-    })));
-  }
-  return result;
-}
-
-const brief = (items: Record<string, any[]>) => Object.fromEntries(Object.entries(items).map(([scene, entries]) => [
-  scene, entries.map(({ sourceName, sceneItemId, sceneItemIndex, sceneItemEnabled }) => ({ name: sourceName, id: sceneItemId, index: sceneItemIndex, enabled: sceneItemEnabled })),
-]));
-
 async function main(): Promise<void> {
   const config = await loadConfig();
   assert.ok(config.env.OBS_WS_URL, "OBS_WS_URL is missing from .env");
+  const obsUrl = config.env.OBS_WS_URL;
   process.env.DEBUG = "1";
   const obs = new OBSWebSocket();
-  await obs.connect(config.env.OBS_WS_URL, config.env.OBS_WS_PASSWORD);
+  await obs.connect(obsUrl, config.env.OBS_WS_PASSWORD);
   const origLog = console.log;
   const logs: string[] = [];
   const frames: CaptureFrame[] = [];
@@ -45,13 +30,13 @@ async function main(): Promise<void> {
   const bus = new EventBus();
   bus.on("leak.cleared", ({ at }) => { clearedAt.push(at); });
   bus.on("leak.detected", ({ id }) => { detectedIds.push(id); });
-  const before = await inspect(obs);
+  const before = await inspectScenes(obs, [CONTENT, BROADCAST]);
   const broadcast = before[BROADCAST]!;
   const masksBefore = broadcast.filter((item) => /^Twitchy Mask \d+$/.test(item.sourceName));
   assert.equal(masksBefore.length, config.maskPoolSize, "configured mask pool not found in Twitchy Broadcast");
   assert.ok(masksBefore.every((item) => !item.sceneItemEnabled), "mask already enabled before test; refusing to change OBS");
   assert.ok(!(before[CONTENT] ?? []).some((item) => item.sourceName === tempName));
-  origLog("OBS scene items before:", JSON.stringify(brief(before), null, 2));
+  origLog("OBS scene items before:", JSON.stringify(briefScenes(before), null, 2));
 
   let tempId: number | undefined;
   let backdropId: number | undefined;
@@ -94,7 +79,7 @@ async function main(): Promise<void> {
     };
     await waitForLeaks(0, 5, 12_000);
     await sleep(350);
-    const first = frames.findLast((frame) => frame.leaks.length >= 5);
+    const first = [...frames].reverse().find((frame) => frame.leaks.length >= 5);
     assert.ok(first, "no frame contained five fixture detections");
     const unique = (frame: CaptureFrame) => [...new Map(frame.leaks.map((leak) => [leak.fingerprint, leak])).values()];
     const initialLeaks = unique(first);
@@ -102,10 +87,12 @@ async function main(): Promise<void> {
     assert.deepEqual(initialLeaks.map((leak) => leak.kind).sort(), ["api_key", "api_key", "api_key", "email", "password"]);
 
     const activeMasks = async () => {
-      const { sceneItems } = await obs.call("GetSceneItemList", { sceneName: BROADCAST });
+      const { sceneItems } = await obs.call("GetSceneItemList", { sceneName: BROADCAST }) as unknown as { sceneItems: Array<{
+        sourceName: string; sceneItemId: number; sceneItemEnabled: boolean;
+      }> };
       return Promise.all(sceneItems.filter((item) => /^Twitchy Mask \d+$/.test(item.sourceName) && item.sceneItemEnabled).map(async (item) => {
-        const t = (await obs.call("GetSceneItemTransform", { sceneName: BROADCAST, sceneItemId: item.sceneItemId })).sceneItemTransform;
-        return { id: item.sourceName, x: t.positionX, y: t.positionY, w: t.boundsWidth || t.width, h: t.boundsHeight || t.height };
+        const t = (await obs.call("GetSceneItemTransform", { sceneName: BROADCAST, sceneItemId: item.sceneItemId })).sceneItemTransform as unknown as Record<string, number>;
+        return { id: item.sourceName, x: t.positionX!, y: t.positionY!, w: t.boundsWidth || t.width!, h: t.boundsHeight || t.height! };
       }));
     };
     const contains = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
@@ -171,18 +158,8 @@ async function main(): Promise<void> {
     }
     if (engineStarted) {
       for (const item of masksBefore) {
-        const t = item.transform;
-        try {
-          const target: Record<string, unknown> = {
-            positionX: t.positionX, positionY: t.positionY, rotation: t.rotation, scaleX: t.scaleX, scaleY: t.scaleY,
-            alignment: t.alignment, boundsType: t.boundsType, boundsAlignment: t.boundsAlignment,
-            cropLeft: t.cropLeft, cropRight: t.cropRight, cropTop: t.cropTop, cropBottom: t.cropBottom,
-          };
-          if (t.boundsWidth > 0) target.boundsWidth = t.boundsWidth;
-          if (t.boundsHeight > 0) target.boundsHeight = t.boundsHeight;
-          await obs.call("SetSceneItemTransform", { sceneName: BROADCAST, sceneItemId: item.sceneItemId, sceneItemTransform: target });
-          await obs.call("SetSceneItemEnabled", { sceneName: BROADCAST, sceneItemId: item.sceneItemId, sceneItemEnabled: false });
-        } catch (caught) { error ??= new Error(`Failed to restore ${item.sourceName}: ${String(caught)}`); }
+        try { await restoreItemTransform(obs, BROADCAST, item); }
+        catch (caught) { error ??= new Error(`Failed to restore ${item.sourceName}: ${String(caught)}`); }
       }
     }
     if (obs.identified) await obs.disconnect();
@@ -190,11 +167,11 @@ async function main(): Promise<void> {
   }
 
   const verify = new OBSWebSocket();
-  await verify.connect(config.env.OBS_WS_URL, config.env.OBS_WS_PASSWORD);
+  await verify.connect(obsUrl, config.env.OBS_WS_PASSWORD);
   let after: Record<string, any[]>;
-  try { after = await inspect(verify); } finally { if (verify.identified) await verify.disconnect(); }
-  origLog("OBS scene items after:", JSON.stringify(brief(after), null, 2));
-  assert.deepEqual(brief(after), brief(before), "scene item list/order/enabled state differs from baseline");
+  try { after = await inspectScenes(verify, [CONTENT, BROADCAST]); } finally { if (verify.identified) await verify.disconnect(); }
+  origLog("OBS scene items after:", JSON.stringify(briefScenes(after), null, 2));
+  assert.deepEqual(briefScenes(after), briefScenes(before), "scene item list/order/enabled state differs from baseline");
   assert.deepEqual(after, before, "scene transforms differ from baseline");
   assert.ok(!(after[CONTENT] ?? []).some((item) => item.sourceName === tempName || item.sourceName === backdropName), "temporary source still exists");
   assert.ok((after[BROADCAST] ?? []).filter((item) => /^Twitchy Mask \d+$/.test(item.sourceName)).every((item) => !item.sceneItemEnabled));

@@ -37,9 +37,19 @@ test("reports disabled detector cases as pending and counts unmatched events as 
     maskLiveAt: new Map(), enabledDetectors: ["api_key", "email", "password"], delayMs: 1_000,
   });
   assert.equal(result.cases.find(({ id }) => id === "future-phone")?.status, "pending");
-  assert.equal(result.headline.eligible, 1);
+  assert.equal(result.headline.eligible, 0);
   assert.equal(result.headline.falseAlarms, 1);
   assert.deepEqual(result.falseAlarmLeakIds, ["stray"]);
+});
+
+test("decoys are clean neutrals in the headline denominator", () => {
+  const result = scoreGauntlet({
+    cases: [cases[4]!], detected: [], cleared: [], maskLiveAt: new Map(),
+    enabledDetectors: ["api_key", "email", "password"], delayMs: 1_000,
+  });
+  assert.equal(result.cases[0]?.status, "clean");
+  assert.equal(result.headline.eligible, 0);
+  assert.equal(result.headline.blocked, 0);
 });
 
 test("matches by kind, time window and canvas region, and scores flash separately", () => {
@@ -56,7 +66,7 @@ test("matches by kind, time window and canvas region, and scores flash separatel
   assert.deepEqual(result.falseAlarmLeakIds, ["wrong-region"]);
   assert.equal(result.headline.blocked, 1);
   assert.equal(result.headline.eligible, 1);
-  assert.equal(result.flash.blocked, 0);
+  assert.equal(result.flash.blocked, 1);
   assert.equal(result.flash.eligible, 1);
   assert.equal(result.headline.everyMaskUpBeforeAir, true);
 });

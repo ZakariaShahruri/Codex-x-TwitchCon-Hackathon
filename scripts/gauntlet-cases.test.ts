@@ -8,7 +8,7 @@ const box: Box = { x: 0, y: 0, w: 12, h: 12 };
 const lineFor = (text: string) => ({ text, box, words: text.split(/\s+/u).map((word) => ({ text: word, box })) });
 // Keep real detector misses visible while allowing the regression suite to run green.
 // This JWT contains lowercase base64url characters; the current detector regex is uppercase-only.
-const knownDetectorGaps = new Map([["jwt", "api_key"] as const]);
+const knownDetectorGaps = new Map<string, LeakKind>([["jwt", "api_key"]]);
 
 function detectedKinds(example: GauntletCase): LeakKind[] {
   const line = lineFor(example.text);

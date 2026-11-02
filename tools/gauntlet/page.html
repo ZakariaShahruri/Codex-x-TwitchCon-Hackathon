@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leak Gauntlet</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#090d13;color:#f2f5f8}
+body{position:relative}.top{position:absolute;z-index:5;left:2.5%;right:2.5%;top:2.5%;display:flex;justify-content:space-between;align-items:center;font-size:clamp(18px,2vw,34px);font-weight:900;letter-spacing:.06em;text-shadow:0 2px 12px #000}
+.brand{color:#55f0ad}.pill{border:2px solid currentColor;padding:.35em .7em;border-radius:999px;font-size:.55em}.card{position:absolute;min-width:55%;padding:clamp(18px,2.3vw,42px);border-radius:18px;box-shadow:0 18px 70px #0008;border:2px solid #ffffff24}
+.card.dark{background:#101923;color:#e9f1fa}.card.light{background:#f4f6fa;color:#17212d;border-color:#bdc6d2}.card.terminal.dark{background:#0c1117;color:#e9f1fa}.card.terminal.light{background:#f7f9fb;color:#202a34}.card.editor.dark{background:#15191e;color:#e9f1fa}.card.editor.light{background:#fff;color:#202a34}.card.json.light{background:#fff;color:#17212d}.card.json.dark{background:#252b35;color:#f4f6fa}.card.dm{font-family:system-ui,sans-serif;border-radius:28px}.card.dm.dark{background:#252c3a;color:#f3f5f9}.card.dm.light{background:#e8f2ff;color:#172a43}.context{font-size:.68em;opacity:.7;margin-bottom:1em}.secret{font-weight:750;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}.final{position:absolute;inset:14% 10%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border-radius:28px;background:#101923;border:2px solid #55f0ad;box-shadow:0 0 90px #55f0ad22;padding:4%}.final h1{font-size:clamp(30px,5vw,86px);margin:0 0 .35em;color:#55f0ad}.score{font-size:clamp(27px,4vw,70px);font-weight:900}.details{font-size:clamp(16px,2vw,32px);line-height:1.7;margin-top:1em}.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header class="top"><div class="brand">LEAK GAUNTLET <span id="round">· READY</span></div><div id="tag" class="pill">WAITING FOR SHIELD</div></header>
+<main id="stage"></main>
+<section id="final" class="final hidden"><h1>LEAK GAUNTLET</h1><div id="score" class="score">Scoring…</div><div id="details" class="details"></div></section>
+<script>
+const stage=document.querySelector('#stage'),round=document.querySelector('#round'),tag=document.querySelector('#tag'),final=document.querySelector('#final');
+let active;
+async function post(data){await fetch('/events',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)})}
+function esc(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
+async function run(){
+ const plan=await(await fetch('/plan')).json();
+ for(const item of plan.cases){
+  final.classList.add('hidden');stage.replaceChildren();
+  round.textContent='· '+item.label;tag.textContent=item.context.toUpperCase();
+  const card=document.createElement('article');card.className=`card ${item.theme} ${item.style}`;card.style.left=item.x+'%';card.style.top=item.y+'%';card.style.width=item.width+'%';card.style.fontSize=item.fontPx+'px';
+  const context=document.createElement('div');context.className='context';context.textContent=item.context;
+  const text=document.createElement('div');text.className='secret';text.textContent=item.displayText;
+  card.append(context,text);stage.append(card);active={id:item.id,card,text};
+  await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);
+  const r=text.getBoundingClientRect();
+  await post({type:'painted',id:item.id,at:Date.now(),region:{x:r.x/innerWidth*plan.width,y:r.y/innerHeight*plan.height,w:r.width/innerWidth*plan.width,h:r.height/innerHeight*plan.height}});
+  await new Promise(resolve=>setTimeout(resolve,item.visibleMs));
+  card.remove();active=undefined;await post({type:'hidden',id:item.id,at:Date.now()});
+  if(item.holdMs>0)await new Promise(resolve=>setTimeout(resolve,item.holdMs));
+ }
+ stage.replaceChildren();round.textContent='· COMPLETE';tag.textContent='RESULTS';await post({type:'complete'});
+ let result;do{await new Promise(resolve=>setTimeout(resolve,250));result=await(await fetch('/status')).json()}while(!result.score);showScore(result.score);
+}
+function showScore(score){final.classList.remove('hidden');if(!score){document.querySelector('#score').textContent='Run ended without a score';return}
+ const h=score.headline,done=h.blocked+'/'+h.eligible+' blocked';document.querySelector('#score').textContent=done;
+ document.querySelector('#details').textContent=`${h.falseAlarms} false alarms · p50 ${Math.round(h.p50Ms)} ms · p95 ${Math.round(h.p95Ms)} ms · every mask up before air: ${h.everyMaskUpBeforeAir?'YES':'NO'} · flash ${score.flash.blocked}/${score.flash.eligible}`;
+}
+fetch('/status').then(r=>r.json()).then(s=>{if(s.score)showScore(s.score)});run().catch(e=>{tag.textContent='RUN ERROR';document.querySelector('#score').textContent=String(e)});
+</script></body></html>

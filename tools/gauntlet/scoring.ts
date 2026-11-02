@@ -20,7 +20,7 @@ export interface GauntletClearEvent { id: string; at: number }
 
 export interface ScoredCase {
   id: string;
-  status: "blocked" | "missed" | "pending";
+  status: "blocked" | "missed" | "pending" | "clean";
   latencyMs?: number;
   leakId?: string;
 }
@@ -63,11 +63,15 @@ export function scoreGauntlet(input: {
       results.push({ id: example.id, status: "pending" });
       continue;
     }
-    if (!example.flash) eligible += 1;
-    const matchIndex = example.kind === null ? undefined : input.detected.findIndex((event, index) =>
+    if (example.kind !== null && !example.flash) eligible += 1;
+    if (example.kind === null) {
+      results.push({ id: example.id, status: "clean" });
+      continue;
+    }
+    const matchIndex = input.detected.findIndex((event, index) =>
       unusedEvents.has(index) && event.kind === example.kind && overlaps(event.box, example.region) &&
       event.at >= example.paintedAt && event.at <= example.hiddenAt + input.delayMs);
-    if (matchIndex === undefined || matchIndex < 0) {
+    if (matchIndex < 0) {
       results.push({ id: example.id, status: "missed" });
       continue;
     }

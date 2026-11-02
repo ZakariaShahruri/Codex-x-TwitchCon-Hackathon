@@ -11,12 +11,14 @@
     "dev:commands": "TWITCHY_DEV_COMMANDS=1 tsx src/index.ts",
     "demo:events": "tsx src/web/demo-events.ts",
     "obs:setup": "tsx scripts/obs-setup.ts",
+    "pregauntlet": "npm run ocr:build",
+    "gauntlet": "tsx scripts/gauntlet.ts",
     "ocr:build": "node scripts/build-ocr-vision.mjs",
     "fixture:ocr": "swift scripts/generate-ocr-fixture.swift --benchmark && swift scripts/generate-ocr-fixture.swift --benchmark --small",
     "fixture:ocr:matrix": "swift scripts/generate-ocr-fixture.swift --matrix",
     "bench:ocr": "npm run ocr:build && tsx scripts/bench-ocr.ts",
     "pretest": "node scripts/build-ocr-vision.mjs --if-supported",
-    "test": "tsx --test 'src/**/*.test.ts' 'scripts/**/*.test.ts'",
+    "test": "tsx --test 'src/**/*.test.ts' 'scripts/**/*.test.ts' 'tools/**/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
