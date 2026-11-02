@@ -106,6 +106,12 @@ test("compiler errors are readable and never contain the key or the rule text", 
     assert.ok("error" in result);
     assert.doesNotMatch(result.error, /sk-secret-test|Rosalind/);
   }
+  const broke = await compileRule(text, {
+    apiKey: "k", model: "m",
+    fetch: (async () => new Response(JSON.stringify({ error: { type: "insufficient_quota", code: "credit_balance_exhausted" } }), { status: 429 })) as typeof fetch,
+  });
+  assert.ok("error" in broke);
+  assert.match(broke.error, /no credits/);
   const unsafe = await compileRule(text, { apiKey: "k", model: "m", fetch: fakeOpenAI([{ ...momRule, patterns: ["(a+)+"] }, { ...momRule, patterns: ["(a+)+"] }]) });
   assert.ok("error" in unsafe);
   assert.match(unsafe.error, /couldn't make a safe rule/);

@@ -52,7 +52,12 @@ async function askModel(messages: Message[], options: CompileOptions, timeoutMs:
   });
   if (!response.ok) {
     if (response.status === 401) throw new Error("OpenAI rejected OPENAI_API_KEY (401). Check the key in .env.");
-    if (response.status === 429) throw new Error("OpenAI rate limit or quota reached (429). Try again in a minute.");
+    if (response.status === 429) {
+      // Only the error type is read from the body; it never echoes the key or the rule.
+      const type = await response.json().then((body: { error?: { type?: unknown } }) => body.error?.type, () => undefined);
+      if (type === "insufficient_quota") throw new Error("The OpenAI account has no credits left (429). Add credits on platform.openai.com, then try again.");
+      throw new Error("OpenAI rate limit reached (429). Try again in a minute.");
+    }
     throw new Error(`OpenAI request failed (HTTP ${response.status}).`);
   }
   const body = await response.json() as { choices?: Array<{ message?: { content?: unknown; refusal?: unknown } }> };
