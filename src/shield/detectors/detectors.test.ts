@@ -467,6 +467,13 @@ test("IP detector masks public IPv4 and IPv6 addresses and boxes only the addres
     ["IPv4:185.199.108.153", "IPv4:185.199.108.153"],
     ["Public IPv6 2a02:6b8:b010:9020:1::2", "2a02:6b8:b010:9020:1::2"],
     ["server 2001:db8:85a3::8a2e:370:7334.", "2001:db8:85a3::8a2e:370:7334."],
+    // Live Apple Vision readings of the Gauntlet's IPv6 case.
+    ["2a02:6b8:0398::laf", "2a02:6b8:0398::laf"],
+    ["inet6 2a02•6b8:0398::1af", "2a02•6b8:0398::1af"],
+    ["inet6 2a02:6b8:0398:1af", "2a02:6b8:0398:1af"],
+    ["2001:db8•85a3:-8a2e:370:7334", "2001:db8•85a3:-8a2e:370:7334"],
+    ["ssh rootQ198.51.100.17 -p 22", "rootQ198.51.100.17"],
+    ["ssh root@198.51.100.17-p 22", "root@198.51.100.17-p"],
   ]) {
     const observation = line(text);
     const candidates = detectIps([observation]);
@@ -475,6 +482,14 @@ test("IP detector masks public IPv4 and IPv6 addresses and boxes only the addres
     assert.equal(candidates[0]!.preview.includes(address), false);
     assertOnlyMatchedWord(candidates[0]!, observation.words.find((word) => word.text === address)!);
   }
+});
+
+test("IP detector reads IPv6 through OCR spaces after colons and masks every piece", () => {
+  const observation = line("2001: db8:85a3::8a2e: 370:7334");
+  const [candidate] = detectIps([observation]);
+  assert.ok(candidate);
+  assert.deepEqual(candidate.box, { x: 0, y: 20, w: observation.box.w - 2, h: 12 });
+  assert.deepEqual(detectIps([line("Note: add: face: deco")]), []);
 });
 
 test("IP detector ignores private, local and well-known addresses, versions, OIDs and times", () => {
@@ -491,6 +506,9 @@ test("IP detector ignores private, local and well-known addresses, versions, OID
     "version 1.2.0.4",
     "build 2.0.1.7",
     "v1.4.0.2",
+    "APP_VERSION=1.4.0.2",
+    "range 10.0.0.1-10.0.0.255",
+    "serial 4.12.2024.1",
     "Chrome 120.0.6099.129",
     "oid 1.3.6.1.4.1",
     "02.11.20.26",
@@ -501,6 +519,10 @@ test("IP detector ignores private, local and well-known addresses, versions, OID
     "mac 00:1a:2b:3c:4d:5e",
     "std::vector<int>",
     "beef::cafe",
+    "2024:10:31:12 backup done",
+    "2023-11-02 2024-01-15",
+    "id 2024-ab12-cd34",
+    "550e8400-e29b-41d4-a716-446655440000",
   ]) assert.deepEqual(detectIps([line(text)]), [], text);
 });
 
