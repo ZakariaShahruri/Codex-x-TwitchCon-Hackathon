@@ -4,7 +4,7 @@ Things one track needs to know about the other's changes. Newest first. Each not
 
 ## 2026-11-03 · README rewritten for judges (Zakaria → Salina)
 
-The README now leads with the pitch, how it works, the Gauntlet result, features, setup and a "Built with Codex" section. Your Twitch setup steps are kept under "Twitch setup"; the detailed Track B notes now live only in `docs/commands.md`. It no longer calls the rules editor experimental, so the dashboard's "Experimental" label is the last place that says so.
+The README now leads with the pitch, how it works, the Gauntlet result, features, setup and a "Built with Codex" section. Your Twitch setup steps are kept under "Twitch setup"; the detailed Track B notes now live only in `docs/commands.md`. It no longer calls the rules editor experimental, and neither does the dashboard: the rules tile's eyebrow now reads "Compiled once, runs locally" and the tile is open by default (still collapsible). Only `index.html` and one CSS comment changed.
 
 ## 2026-11-03 · Smooth caret on dashboard inputs (Zakaria → Salina)
 

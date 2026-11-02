@@ -409,7 +409,7 @@ input.has-smooth-caret { caret-color: transparent; }
 .confetti { position: absolute; top: -12px; left: var(--confetti-x); z-index: 2; width: 7px; height: 11px; border-radius: 2px; pointer-events: none; animation: confetti-fall 1.15s var(--confetti-delay) ease-in forwards; }
 .confetti-mint { background: var(--mint); } .confetti-gold { background: var(--gold); } .confetti-violet { background: var(--purple-soft); } .confetti-pink { background: var(--danger-soft); }
 
-/* Rules (experimental, collapsed) */
+/* Rules (open by default, collapsible) */
 .rules-panel { padding: 0; }
 .rules-panel summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px; border-radius: var(--radius); cursor: pointer; list-style: none; }
 .rules-panel summary::-webkit-details-marker { display: none; }
