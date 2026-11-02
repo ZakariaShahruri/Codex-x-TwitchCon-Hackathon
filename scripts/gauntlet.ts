@@ -75,6 +75,9 @@ async function main(): Promise<void> {
   let serverPort = 0;
   let obs: OBSWebSocket | undefined;
   let sourceName = `Twitchy Leak Gauntlet ${process.pid}`;
+  // Opaque black under the page: until the page first paints, the browser source is transparent and would show
+  // the real desktop to OCR (it caught a real password from the streamer's open editor).
+  const backdropName = `Twitchy Leak Gauntlet backdrop ${process.pid}`;
   let before: Awaited<ReturnType<typeof inspectScenes>> | undefined;
   let stops: StopTrack[] = [];
   let privateDir: string | undefined;
@@ -154,8 +157,8 @@ async function main(): Promise<void> {
     obs = new OBSWebSocket();
     await obs.connect(obsUrl, config.env.OBS_WS_PASSWORD);
     // A run killed before its cleanup (power loss, kill -9) leaves its page source behind; remove it before the baseline.
-    const { inputs } = await obs.call("GetInputList", { inputKind: "browser_source" }) as unknown as { inputs: Array<{ inputName: string }> };
-    for (const { inputName } of inputs.filter((input) => /^Twitchy Leak Gauntlet \d+$/.test(input.inputName))) {
+    const { inputs } = await obs.call("GetInputList") as unknown as { inputs: Array<{ inputName: string }> };
+    for (const { inputName } of inputs.filter((input) => /^Twitchy Leak Gauntlet (?:backdrop )?\d+$/.test(input.inputName))) {
       console.log(`Removing ${inputName} left behind by an interrupted run.`);
       await obs.call("RemoveInput", { inputName });
     }
@@ -168,6 +171,12 @@ async function main(): Promise<void> {
     console.log("OBS scene items before:", JSON.stringify(briefScenes(before), null, 2));
 
     const video = await obs.call("GetVideoSettings") as unknown as { baseWidth: number; baseHeight: number };
+    const backdrop = await obs.call("CreateInput", {
+      sceneName: CONTENT, inputName: backdropName, inputKind: "color_source_v3",
+      inputSettings: { color: 0xff000000, width: video.baseWidth, height: video.baseHeight }, sceneItemEnabled: true,
+    });
+    if (backdrop.sceneItemId === null) throw new Error("OBS did not return the backdrop scene item ID");
+    await obs.call("SetSceneItemIndex", { sceneName: CONTENT, sceneItemId: backdrop.sceneItemId, sceneItemIndex: before[CONTENT]!.length });
     const created = await obs.call("CreateInput", {
       sceneName: CONTENT, inputName: sourceName, inputKind: "browser_source",
       inputSettings: { url: `http://127.0.0.1:${serverPort}/`, width: video.baseWidth, height: video.baseHeight, shutdown: false, restart_when_active: false },
@@ -175,7 +184,7 @@ async function main(): Promise<void> {
     });
     if (created.sceneItemId === null) throw new Error("OBS did not return the temporary browser source scene item ID");
     const sourceId = created.sceneItemId;
-    await obs.call("SetSceneItemIndex", { sceneName: CONTENT, sceneItemId: sourceId, sceneItemIndex: before[CONTENT]!.length });
+    await obs.call("SetSceneItemIndex", { sceneName: CONTENT, sceneItemId: sourceId, sceneItemIndex: before[CONTENT]!.length + 1 });
 
     // A throwaway watchlist with the cases' fake entries, so the streamer's real twitchy.private.json is never touched.
     privateDir = await mkdtemp(resolve(tmpdir(), "twitchy-gauntlet-"));
@@ -236,10 +245,12 @@ async function main(): Promise<void> {
     if (obs?.identified) {
       try {
         const current = await obs.call("GetSceneItemList", { sceneName: CONTENT }) as unknown as { sceneItems: Array<{ sourceName: string; sceneItemId: number }> };
-        const temporary = current.sceneItems.find((item) => item.sourceName === sourceName);
-        if (temporary) await obs.call("RemoveSceneItem", { sceneName: CONTENT, sceneItemId: temporary.sceneItemId });
+        // Scene items first: RemoveInput alone finishes asynchronously and would still show in the baseline check.
+        for (const temporary of current.sceneItems.filter((item) => item.sourceName === sourceName || item.sourceName === backdropName))
+          await obs.call("RemoveSceneItem", { sceneName: CONTENT, sceneItemId: temporary.sceneItemId });
       } catch (error) { primaryError ??= error; }
       try { await obs.call("RemoveInput", { inputName: sourceName }); } catch { /* absent when source creation did not complete */ }
+      try { await obs.call("RemoveInput", { inputName: backdropName }); } catch { /* absent when backdrop creation did not complete */ }
       for (const item of before?.[BROADCAST]?.filter((entry) => /^Twitchy Mask \d+$/.test(entry.sourceName)) ?? []) {
         try { await restoreItemTransform(obs, BROADCAST, item); } catch (error) { primaryError ??= error; }
       }
@@ -255,7 +266,11 @@ async function main(): Promise<void> {
     let after;
     try { after = await inspectScenes(verify, [CONTENT, BROADCAST]); } finally { if (verify.identified) await verify.disconnect(); }
     console.log("OBS scene items after:", JSON.stringify(briefScenes(after), null, 2));
-    assert.deepEqual(after, before, "OBS scene lists, order, enabled states or transforms differ from baseline");
+    const changed = Object.keys(before).flatMap((scene) => {
+      const was = JSON.stringify(before[scene]);
+      return was === JSON.stringify(after[scene]) ? [] : [`${scene}: before ${was}\n  after ${JSON.stringify(after[scene])}`];
+    });
+    assert.deepEqual(changed, [], `OBS differs from baseline:\n${changed.join("\n")}`);
     console.log("OBS restored to baseline; temporary browser source removed and masks disabled.");
   }
   if (primaryError) throw primaryError;
