@@ -57,11 +57,29 @@ export interface EventMap {
   };
   /** B → A */
   "rules.compile": { requestId: string; text: string };
+  /** B → A; the dashboard's "Set up OBS" button. Runs the same idempotent setup as `npm run obs:setup`. Without `contentScene`, setup nests the scene that is currently live. */
+  "obs.setup": { requestId: string; contentScene?: string };
+  /** A → B; `changes` are human-readable lines such as "Created scene: Twitchy Raw". `error` never includes the OBS password. */
+  "obs.setupResult": { requestId: string; ok: boolean; changes?: string[]; error?: string };
+  /** B → B (twitch → web); a viewer cheered Twitchy shortly after a save. `by` is the viewer's login. */
+  "chat.cheer": { by: string; at: number };
+  /** B → B (twitch → web); the dashboard's Twitch check. Never contains tokens or the client secret. */
+  "twitch.status": { connected: boolean; login?: string; expiresInHours?: number; error?: string; at: number };
 }
 
 export type EventName = keyof EventMap;
 
-/** The only events the web bridge may forward to browser pages (overlay, dashboard). */
+/** The only events the web bridge may forward to browser pages (overlay, dashboard). Never config.updated: it carries watchlist values. */
 export const browserEvents = [
   "leak.detected", "leak.cleared", "shield.state", "engine.metrics", "rules.compiled", "private.state",
+  "obs.setupResult", "chat.cheer", "twitch.status",
+] as const satisfies readonly EventName[];
+
+/**
+ * The only events a browser page may send to the bus. The web bridge accepts them only from the dashboard role,
+ * validates each payload's shape, rejects sockets whose Origin is missing or not this server and whose Host is not
+ * 127.0.0.1:<webPort> or localhost:<webPort> (blocks other websites and DNS rebinding), and never logs config.updated.
+ */
+export const browserCommands = [
+  "shield.command", "config.updated", "rules.compile", "obs.setup",
 ] as const satisfies readonly EventName[];

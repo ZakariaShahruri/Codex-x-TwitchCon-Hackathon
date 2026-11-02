@@ -108,6 +108,10 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 | `private.state` | A → B | `{ watchlist: {id,label}[], rules: RuleSummary[], at }` (saved watchlist and rules **without values**; at startup and after every change) |
 | `config.updated` | B → A | `{ watchlist?: { add?: {label,value}[], removeIds? }, enabledDetectors?, sensitiveRegions?, removedRuleIds? }` (from the dashboard) |
 | `rules.compile` | B → A | `{ requestId, text }` (plain-English rule from the dashboard) |
+| `obs.setup` | B → A | `{ requestId, contentScene? }` (dashboard "Set up OBS"; same idempotent setup as `npm run obs:setup`, on its own OBS connection; without `contentScene` it nests the scene that is currently live) |
+| `obs.setupResult` | A → B | `{ requestId, ok, changes?: string[], error? }` (`changes` are readable lines like `"Created scene: Twitchy Raw"`; `error` never includes the OBS password) |
+| `chat.cheer` | B → B | `{ by, at }` (Twitch → overlay: a viewer cheered Twitchy shortly after a save) |
+| `twitch.status` | B → B | `{ connected, login?, expiresInHours?, error?, at }` (Twitch → dashboard setup check; never tokens) |
 
 - `kind`: `'api_key' | 'email' | 'password' | 'phone' | 'card' | 'ip' | 'seed_phrase' | 'qr_code' | 'watchlist' | 'custom_rule' | 'sensitive_region'`
 - `box`: canvas pixels
@@ -117,7 +121,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 - `RuleSummary`: `{ id, description, detector }`. Never contains rule source text, secrets or watchlist values.
 - `preview` is typed `RedactedPreview`; build it with `redacted(label)` from `events.ts`, only from text that contains no detected content.
 - **Watchlist values** travel only dashboard → web bridge → `config.updated` → Track A, in-process, and are never logged. **Track A is the only writer of `twitchy.private.json`** (watchlist and compiled rules) and reports what's saved through `private.state`, labels only.
-- **Browser boundary:** the web bridge forwards only the events in `browserEvents` (`events.ts`, all A → B). B → A events never reach a browser.
+- **Browser boundary:** the web bridge forwards only the events in `browserEvents` (`events.ts`) to pages; `config.updated` never reaches a browser. Pages may send only the events in `browserCommands` (`shield.command`, `config.updated`, `rules.compile`, `obs.setup`), and only from the dashboard role. The bridge validates every payload's shape, rejects sockets with a missing or foreign `Origin` and any `Host` other than `127.0.0.1:<webPort>` / `localhost:<webPort>` (so another website or a DNS-rebinding page can't send `panic` or watchlist changes), and never logs `config.updated`. The dashboard's watchlist value field is a password-style input, because the dashboard may be on screen.
 
 ### Command semantics
 - `on` / `off`: arm or disarm detection. Masks already placed still expire normally.

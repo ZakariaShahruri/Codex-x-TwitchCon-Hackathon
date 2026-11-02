@@ -2,6 +2,12 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-02 · Tier 2 contract events (Salina ↔ Zakaria)
+
+- **Contract change, agreed by both.** New events in `src/shared/events.ts`: `obs.setup` (B → A, `{ requestId, contentScene? }`), `obs.setupResult` (A → B, `{ requestId, ok, changes?: string[], error? }`), `chat.cheer` and `twitch.status` (both B → B). Nothing existing changed.
+- `browserEvents` now also forwards `obs.setupResult`, `chat.cheer` and `twitch.status`. New `browserCommands` lists the only events a page may send (dashboard role only, payloads validated, Origin and Host checked, `config.updated` never logged).
+- **Zakaria:** answer `obs.setup` with `obs.setupResult` (readable change lines, no OBS password in errors). **Salina:** emit `chat.cheer` and `twitch.status`, and enforce `browserCommands` in the web bridge.
+
 ## 2026-11-02 · Phone, card and QR leaks are live (Zakaria → Salina)
 
 - New `leak.detected` kinds you'll now see: `phone` (preview `phone number`), `card` (`credit card`) and `qr_code` (`QR code`). They are enabled in `twitchy.config.json`. The per-type Twitchy reactions from Tier 2 can key off these, and the QR one is in the demo montage.
