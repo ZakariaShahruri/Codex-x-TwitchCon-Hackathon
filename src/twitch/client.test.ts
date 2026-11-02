@@ -265,6 +265,59 @@ test("!twitchy uses singular leak grammar", async () => {
   await stop();
 });
 
+test("cheers are accepted only within each save window, once per viewer, and summarized once per save", async () => {
+  const h = harness({ cheerWindowMs: 400, cheerOverallLimit: 10, chatMessageGapMs: 1 });
+  const bus = new EventBus();
+  const cheers: { by: string; at: number }[] = [];
+  bus.on("chat.cheer", (cheer) => { cheers.push(cheer); });
+  const stop = await h.start(bus, config());
+  const socket = h.sockets[0]!;
+  socket.message(await fixture("session-welcome"));
+  await flush();
+  bus.emit("shield.state", { status: "armed", at: 1 });
+
+  socket.message(await chatFrame("GG", "cheer-too-early", "", "early"));
+  bus.emit("leak.detected", { id: "save-1", kind: "email", box: { x: 1, y: 1, w: 2, h: 2 }, preview: "email" as any, totalBlocked: 1, at: 2 });
+  socket.message(await chatFrame("!cheer", "save1-alpha", "", "alpha"));
+  socket.message(await chatFrame("GG", "save1-alpha-again", "", "alpha"));
+  socket.message(await chatFrame("PoGChaMP!", "save1-beta", "", "beta"));
+  socket.message(await chatFrame("<3", "save1-gamma", "", "gamma"));
+  socket.message(await chatFrame("good job twitchy", "save1-delta", "", "delta"));
+  await new Promise((resolve) => setTimeout(resolve, 450));
+
+  socket.message(await chatFrame("PogChamp", "cheer-too-late", "", "late"));
+  bus.emit("leak.detected", { id: "save-2", kind: "api_key", box: { x: 3, y: 3, w: 2, h: 2 }, preview: "api key" as any, totalBlocked: 2, at: 3 });
+  socket.message(await chatFrame("!cheer", "save2-alpha", "", "alpha"));
+  await new Promise((resolve) => setTimeout(resolve, 450));
+
+  assert.deepEqual(cheers.map(({ by }) => by), ["alpha", "beta", "gamma", "delta", "alpha"]);
+  const replies = h.requests.filter((request) => request.url.includes("/chat/messages")).map((request) => request.body.message);
+  assert.equal(replies.filter((reply) => reply === "Twitchy felt the love from 4 viewers 💜").length, 1);
+  assert.equal(replies.filter((reply) => reply === "Twitchy felt the love from 1 viewer 💜").length, 1);
+  assert.ok(replies.every((reply) => !reply.includes("alpha") && !reply.includes("beta")), "summary messages contain counts only");
+  await stop();
+});
+
+test("the overall cheer limit caps accepted viewers per second", async () => {
+  const h = harness({ cheerWindowMs: 120, cheerRateWindowMs: 1_000, cheerOverallLimit: 2, chatMessageGapMs: 1 });
+  const bus = new EventBus();
+  const cheers: string[] = [];
+  bus.on("chat.cheer", ({ by }) => { cheers.push(by); });
+  const stop = await h.start(bus, config());
+  const socket = h.sockets[0]!;
+  socket.message(await fixture("session-welcome"));
+  await flush();
+  bus.emit("shield.state", { status: "armed", at: 1 });
+  bus.emit("leak.detected", { id: "rate-save", kind: "email", box: { x: 1, y: 1, w: 2, h: 2 }, preview: "email" as any, totalBlocked: 1, at: 2 });
+  for (const [index, login] of ["one", "two", "three"].entries()) socket.message(await chatFrame("GG", `rate-${index}`, "", login));
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  assert.deepEqual(cheers, ["one", "two"]);
+  const replies = h.requests.filter((request) => request.url.includes("/chat/messages")).map((request) => request.body.message);
+  assert.deepEqual(replies, ["Twitchy felt the love from 2 viewers 💜"]);
+  await stop();
+});
+
 test("a refreshed token is used for subscription retries after Helix 401", async () => {
   const requests: { url: string; init?: RequestInit; body?: any }[] = [];
   const h = harness({

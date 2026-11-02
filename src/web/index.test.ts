@@ -105,9 +105,10 @@ test("filters by role and snapshots state, leak count and private labels on reco
     bus.emit("engine.metrics", { lastFrameMs: 3, p95FrameMs: 4, budgetMs: 50, framesPerSec: 30, at: 12 });
     bus.emit("rules.compile", { requestId: "private-request", text: "secret rule text" });
     bus.emit("leak.detected", { id: "leak-1", kind: "email", box: { x: 1, y: 2, w: 3, h: 4 }, preview: redacted("email"), totalBlocked: 7, at: 13 });
+    bus.emit("chat.cheer", { by: "salina", at: 14 });
     await settle();
-    assert.deepEqual(events(firstOverlay.messages), ["shield.state", "leak.detected"]);
-    assert.deepEqual(events(firstDashboard.messages), ["shield.state", "private.state", "engine.metrics", "leak.detected"]);
+    assert.deepEqual(events(firstOverlay.messages), ["shield.state", "leak.detected", "chat.cheer"]);
+    assert.deepEqual(events(firstDashboard.messages), ["shield.state", "private.state", "engine.metrics", "leak.detected", "chat.cheer"]);
     assert.equal(JSON.stringify(firstOverlay.messages).includes("secret rule text"), false);
     assert.equal(JSON.stringify(firstDashboard.messages).includes("secret rule text"), false);
     await close(overlay); overlay = undefined;

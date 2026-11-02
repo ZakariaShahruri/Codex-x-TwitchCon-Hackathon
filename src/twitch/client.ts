@@ -50,6 +50,9 @@ export interface EventSubDependencies {
   twitchyCooldownMs?: number;
   chatBatchMs?: number;
   chatMessageGapMs?: number;
+  cheerWindowMs?: number;
+  cheerRateWindowMs?: number;
+  cheerOverallLimit?: number;
 }
 
 function asRecord(value: unknown): Record<string, any> | undefined {
@@ -95,10 +98,38 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     let leakCount = 0;
     let streamStarted = false;
     let streamLeakCount = 0;
-    const stateListener = (state: EventMap["shield.state"]) => { shieldStatus = state.status; };
+    const cheerWindowMs = dependencies.cheerWindowMs ?? 10_000;
+    const cheerRateWindowMs = dependencies.cheerRateWindowMs ?? 1_000;
+    const cheerOverallLimit = dependencies.cheerOverallLimit ?? 3;
+    interface SaveWindow { expiresAt: number; users: Set<string>; timer: Timer }
+    const saveWindows: SaveWindow[] = [];
+    const cheerTimes: number[] = [];
+    const clearSaveWindows = () => {
+      for (const window of saveWindows) clearTimeout(window.timer);
+      saveWindows.length = 0;
+    };
+    const openSaveWindow = () => {
+      const window = { expiresAt: Date.now() + cheerWindowMs, users: new Set<string>(), timer: undefined as unknown as Timer };
+      window.timer = setTimeout(() => {
+        const index = saveWindows.indexOf(window);
+        if (index < 0) return;
+        saveWindows.splice(index, 1);
+        if (window.users.size) {
+          const count = window.users.size;
+          sender.sendReply(`Twitchy felt the love from ${count} viewer${count === 1 ? "" : "s"} 💜`);
+        }
+      }, cheerWindowMs);
+      window.timer.unref?.();
+      saveWindows.push(window);
+    };
+    const stateListener = (state: EventMap["shield.state"]) => {
+      shieldStatus = state.status;
+      if (state.status === "panic" || state.status === "off") clearSaveWindows();
+    };
     const leakCountListener = (leak: EventMap["leak.detected"]) => {
       if (streamStarted) leakCount = ++streamLeakCount;
       else leakCount = leak.totalBlocked;
+      openSaveWindow();
     };
     bus.on("shield.state", stateListener);
     bus.on("leak.detected", leakCountListener);
@@ -116,6 +147,28 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
 
     const onChat = (message: NonNullable<ReturnType<typeof parseChatNotification>>) => {
       const command = message.text.trim().toLowerCase();
+      if (command === "!cheer" || /^(?:gg+|pogchamp|<3+|good job twitchy)[.!?]*$/i.test(command)) {
+        if (shieldStatus === "panic" || shieldStatus === "off") return;
+        const now = Date.now();
+        while (saveWindows.length && saveWindows[0]!.expiresAt <= now) {
+          const expired = saveWindows.shift()!;
+          clearTimeout(expired.timer);
+          if (expired.users.size) {
+            const count = expired.users.size;
+            sender.sendReply(`Twitchy felt the love from ${count} viewer${count === 1 ? "" : "s"} 💜`);
+          }
+        }
+        const window = saveWindows.at(-1);
+        if (!window || window.expiresAt <= now) return;
+        const userKey = message.userId || message.login.toLowerCase();
+        if (window.users.has(userKey)) return;
+        while (cheerTimes.length && cheerTimes[0]! <= now - cheerRateWindowMs) cheerTimes.shift();
+        if (cheerTimes.length >= cheerOverallLimit) return;
+        window.users.add(userKey);
+        cheerTimes.push(now);
+        bus.emit("chat.cheer", { by: message.login, at: now });
+        return;
+      }
       if (command === "!twitchy") {
         const key = message.userId || message.login;
         const now = Date.now();
@@ -405,6 +458,7 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
               streamStarted = true;
               streamLeakCount = 0;
               leakCount = 0;
+              clearSaveWindows();
               bus.emit("shield.command", { action: "on", by: "stream.online", at: Date.now() });
             }
             if (subscription?.type === "stream.offline") {
@@ -474,6 +528,7 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       candidate = undefined;
       bus.off("shield.state", stateListener);
       bus.off("leak.detected", leakCountListener);
+      clearSaveWindows();
       sender.stop();
       tokenManager.stop();
     };

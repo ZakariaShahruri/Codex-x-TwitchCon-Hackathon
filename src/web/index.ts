@@ -17,7 +17,7 @@ export type WireSnapshot = {
 };
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const roleEvents: Record<Role, ReadonlySet<BrowserEvent>> = {
-  overlay: new Set(["leak.detected", "leak.cleared", "shield.state"]),
+  overlay: new Set(["leak.detected", "leak.cleared", "shield.state", "chat.cheer"]),
   dashboard: new Set(browserEvents),
 };
 
