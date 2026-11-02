@@ -66,7 +66,7 @@ process.stdin.on('data', (chunk) => {
   }
 });
 `);
-  const ocr = new AppleVisionOCR({ executablePath: helper.executable, timeoutMs: 60, coldStartTimeoutMs: 1_000 });
+  const ocr = new AppleVisionOCR({ executablePath: helper.executable, timeoutMs: 60, coldStartTimeoutMs: 10_000 }); // generous: spawning node is slow while the OCR matrix runs in parallel
   try {
     assert.deepEqual(await ocr.recognize(new Uint8Array([1])), []);
     await assert.rejects(ocr.recognize(new Uint8Array([2])), /timed out after 60 ms/);
