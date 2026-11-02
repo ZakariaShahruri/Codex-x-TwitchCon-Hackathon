@@ -45,9 +45,43 @@ process.stdin.on('data', (chunk) => {
 
 test("kills a hung helper and reports a frame-specific timeout", async () => {
   const helper = await mockHelper("process.stdin.resume();");
-  const ocr = new AppleVisionOCR({ executablePath: helper.executable, timeoutMs: 40 });
+  const ocr = new AppleVisionOCR({ executablePath: helper.executable, timeoutMs: 40, coldStartTimeoutMs: 40 });
   try {
     await assert.rejects(ocr.recognize(new Uint8Array([1])), /timed out after 40 ms/);
+  } finally {
+    await ocr.close();
+    await rm(helper.directory, { recursive: true, force: true });
+  }
+});
+
+test("gives a cold helper's first frame the cold-start timeout, then holds warm frames to the normal one", async () => {
+  // Answers the first frame after 150 ms (model load) and every later frame after 150 ms too.
+  const helper = await mockHelper(`
+let data = Buffer.alloc(0);
+process.stdin.on('data', (chunk) => {
+  data = Buffer.concat([data, chunk]);
+  while (data.length >= 4 && data.length >= data.readUInt32BE(0) + 4) {
+    data = data.subarray(data.readUInt32BE(0) + 4);
+    setTimeout(() => process.stdout.write(${JSON.stringify(successResponse)} + '\\n'), 150);
+  }
+});
+`);
+  const ocr = new AppleVisionOCR({ executablePath: helper.executable, timeoutMs: 60, coldStartTimeoutMs: 1_000 });
+  try {
+    assert.deepEqual(await ocr.recognize(new Uint8Array([1])), []);
+    await assert.rejects(ocr.recognize(new Uint8Array([2])), /timed out after 60 ms/);
+  } finally {
+    await ocr.close();
+    await rm(helper.directory, { recursive: true, force: true });
+  }
+});
+
+test("a helper that dies before reading its frame rejects the frame instead of crashing the engine", async () => {
+  const helper = await mockHelper("process.exit(3);");
+  const ocr = new AppleVisionOCR({ executablePath: helper.executable, timeoutMs: 2_000 });
+  try {
+    // A large frame keeps the write pending until the pipe is gone, which is what produced EPIPE live.
+    await assert.rejects(ocr.recognize(new Uint8Array(8 * 1024 * 1024)), /helper (?:exited|stdin failed)/);
   } finally {
     await ocr.close();
     await rm(helper.directory, { recursive: true, force: true });

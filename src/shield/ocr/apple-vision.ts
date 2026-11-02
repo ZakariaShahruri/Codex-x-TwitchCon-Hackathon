@@ -6,6 +6,8 @@ const MAX_FRAME_BYTES = 128 * 1024 * 1024;
 const MAX_STDOUT_LINE_BYTES = 32 * 1024 * 1024;
 const STDERR_TAIL_BYTES = 2_000;
 const MAX_PENDING_FRAMES = 8;
+/** Vision loads its models on the first frame of each helper process: ~230–500 ms vs ~90 ms warm on 1080p. */
+const COLD_START_TIMEOUT_MS = 2_000;
 
 interface FrameResult {
   ok: boolean;
@@ -28,6 +30,8 @@ interface ProcessState {
   stdout: Buffer;
   stderr: Buffer;
   ended: boolean;
+  /** False until the helper has answered once; the first frame gets the cold-start timeout. */
+  warm: boolean;
   killTimer?: NodeJS.Timeout;
 }
 
@@ -35,6 +39,7 @@ export interface AppleVisionOCROptions {
   executablePath?: string;
   level?: "fast" | "accurate";
   timeoutMs?: number;
+  coldStartTimeoutMs?: number;
   onRestart?: () => void;
 }
 
@@ -45,6 +50,7 @@ export class AppleVisionOCR implements OCRService {
   private readonly executablePath: string;
   private readonly level: "fast" | "accurate";
   private readonly timeoutMs: number;
+  private readonly coldStartTimeoutMs: number;
   private readonly onRestart?: () => void;
   private readonly analyses = new WeakMap<Uint8Array, Promise<FrameResult>>();
   private processState: ProcessState | undefined;
@@ -54,8 +60,10 @@ export class AppleVisionOCR implements OCRService {
     this.executablePath = options.executablePath ?? `${process.cwd()}/tools/ocr-vision/.build/twitchy-ocr`;
     this.level = options.level ?? "accurate";
     this.timeoutMs = options.timeoutMs ?? 500;
+    this.coldStartTimeoutMs = options.coldStartTimeoutMs ?? Math.max(this.timeoutMs, COLD_START_TIMEOUT_MS);
     this.onRestart = options.onRestart;
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1) throw new Error("OCR timeoutMs must be a positive integer");
+    if (!Number.isInteger(this.coldStartTimeoutMs) || this.coldStartTimeoutMs < 1) throw new Error("OCR coldStartTimeoutMs must be a positive integer");
   }
 
   async recognize(png: Uint8Array): Promise<OCRTextLine[]> {
@@ -117,13 +125,14 @@ export class AppleVisionOCR implements OCRService {
     header.writeUInt32BE(png.byteLength);
     const packet = Buffer.concat([header, Buffer.from(png.buffer, png.byteOffset, png.byteLength)]);
 
+    const timeoutMs = state.warm ? this.timeoutMs : this.coldStartTimeoutMs;
     return new Promise<FrameResult>((resolve, reject) => {
       const pending: PendingFrame = {
         resolve,
         reject,
         timeout: setTimeout(() => {
-          this.stopState(state, new Error(`Apple Vision OCR frame timed out after ${this.timeoutMs} ms; the helper was restarted. Retry the frame.`));
-        }, this.timeoutMs),
+          this.stopState(state, new Error(`Apple Vision OCR frame timed out after ${timeoutMs} ms; the helper was restarted. Retry the frame.`));
+        }, timeoutMs),
       };
       state.pending.push(pending);
       state.child.stdin.write(packet, (error) => {
@@ -141,11 +150,15 @@ export class AppleVisionOCR implements OCRService {
       throw new Error(`Could not start Apple Vision OCR helper: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    const state: ProcessState = { child, pending: [], stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), ended: false };
+    const state: ProcessState = { child, pending: [], stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), ended: false, warm: false };
     this.processState = state;
     child.stdout.on("data", (chunk: Buffer) => this.consumeStdout(state, chunk));
     child.stderr.on("data", (chunk: Buffer) => {
       state.stderr = Buffer.concat([state.stderr, chunk]).subarray(-STDERR_TAIL_BYTES);
+    });
+    // Writing to a helper that just died emits EPIPE here; unhandled, it would crash the whole engine.
+    child.stdin.on("error", (error) => {
+      this.stopState(state, new HelperExitedError(`Apple Vision OCR helper stdin failed: ${error.message}`));
     });
     child.on("error", (error) => {
       this.stopState(state, new HelperExitedError(`Could not run Apple Vision OCR helper: ${error.message}`));
@@ -177,6 +190,7 @@ export class AppleVisionOCR implements OCRService {
         return;
       }
       clearTimeout(pending.timeout);
+      state.warm = true;
       let result: FrameResult;
       try {
         result = JSON.parse(line) as FrameResult;
