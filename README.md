@@ -115,7 +115,7 @@ Session IDs are in [docs/codex-sessions.md](docs/codex-sessions.md). The main bu
 | [docs/concept.md](docs/concept.md) | The idea and the scope |
 | [docs/architecture.md](docs/architecture.md) | Tracks, event contract, detectors, timing budget |
 | [docs/commands.md](docs/commands.md) | Every command and setting |
-| [video/](video/) | How the demo video was recorded and edited |
+| [video/](video/README.md) | How the demo video was recorded and edited |
 
 ## Team
 

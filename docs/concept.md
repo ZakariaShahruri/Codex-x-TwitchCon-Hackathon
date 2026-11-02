@@ -90,6 +90,8 @@ OBS capture ──┬──► [~1s render delay] ──► broadcast
 
 Ambitious, but gated: **never start a tier until the one before it works flawlessly in the demo.** A leak that airs on camera loses the hackathon; a missing Tier 3 feature doesn't.
 
+**At submission (2026-11-03):** Tier 1 and Tier 2 are built and in the demo. Tier 3 wasn't started.
+
 ### Tier 1: core (must be flawless)
 Everything above: the 4 detectors, delay + masks, Twitch commands, auto-arm, chat announcements, Twitchy overlay with counter.
 

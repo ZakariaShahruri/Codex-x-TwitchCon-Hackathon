@@ -1,13 +1,15 @@
 # Demo video
 
-Everything worth saying or showing in the 3-minute video, so nothing gets forgotten. The storyboard in `concept.md` is the plan; this file is the checklist. Add points as they come up; cross out what doesn't make the cut.
+**Final cut: [youtu.be/7bE7jsvFZwk](https://youtu.be/7bE7jsvFZwk)** (2:24). The narration and captions are in `video/script.json`, and the scripts that recorded and edited it are in `video/` (see `video/README.md`).
+
+This file was the checklist while we made it: what to say and show, and what not to.
 
 ## Hard requirements (Devpost)
 
-- [ ] **3:00 or shorter.**
-- [ ] **Shows it working on Twitch:** a real channel, real chat, the overlay on the stream.
-- [ ] **Shows how Codex was used** during development.
-- [ ] Uploaded to YouTube, **public**.
+- [x] **3:00 or shorter.**
+- [x] **Shows it working on Twitch:** a real channel, real chat, the overlay on the stream.
+- [x] **Shows how Codex was used** during development.
+- [x] Uploaded to YouTube, **public**.
 
 ## Judges score these, so the video must hit each
 
@@ -40,7 +42,7 @@ Everything worth saying or showing in the 3-minute video, so nothing gets forgot
 
 - "Once a secret airs, it's in the VOD, the clips and the screenshots. You can't take it back." (the problem)
 - "Twitchy reads your screen *before* your viewers do." (the idea in one line)
-- "One second of delay. Twitchy needs about half of it." (p95 517 ms of the 1000 ms delay)
+- "One second of delay. Twitchy needs about a third of it." (p95 311 ms of the 1000 ms delay)
 - "Everything runs on your Mac. No frame ever leaves your machine, and there's no AI bill." (Apple Vision OCR, regex + checks, $0 running cost; the only AI call is compiling a plain-English rule, once)
 - "Your watchlist never leaves your laptop, and not even a moderator can unmask it."
 - "Tell Twitchy what to hide in plain English. AI turns it into a rule once, Twitchy tests the rule, and from then on it runs locally on every frame."
@@ -52,8 +54,8 @@ Everything worth saying or showing in the 3-minute video, so nothing gets forgot
 | Number | Source |
 |---|---|
 | **37/37** secrets blocked, **0** false alarms (14 decoys), **3/3** quick flashes | Gauntlet seed 3 |
-| p50 **276 ms**, p95 **517 ms** detect-to-mask, **1 s** stream delay | Gauntlet seed 3 |
-| 10 kinds of leak: API keys (OpenAI, Anthropic, Stripe, GitHub, GitLab, AWS, Google, Slack, Hugging Face, npm, JWTs, Bearer tokens), passwords, emails, phones, cards, public IP addresses, crypto seed phrases, QR codes, watchlist, fixed screen regions | `architecture.md` §5 |
+| p50 **244 ms**, p95 **311 ms** screen-to-mask, **1 s** stream delay | Gauntlet seed 3, 2026-11-03 |
+| 11 detectors: API keys (OpenAI, Anthropic, Stripe, GitHub, GitLab, AWS, Google, Slack, Hugging Face, npm, JWTs, Bearer tokens), passwords, emails, phones, cards, public IP addresses, crypto seed phrases, QR codes, watchlist, fixed screen regions, plain-English rules | `architecture.md` §5 |
 | Cards checked with issuer prefix + Luhn; seed phrases checked with the BIP39 checksum; watchlist fuzzy-matched against OCR mistakes | `architecture.md` §5 |
 
 ## Codex part (required)
@@ -62,7 +64,7 @@ Show, don't tell: the Codex threads on screen (session IDs in `codex-sessions.md
 
 - Two developers, two parallel Codex threads, one per track (shield engine / Twitch + Twitchy), talking only through a shared event contract (`architecture.md`).
 - `AGENTS.md` set the rules Codex followed: stay in your track's folders, test, update the docs, commit small.
-- What Codex built: the shield engine, the Leak Gauntlet scoring and runner, the private watchlist, the Twitch bot and overlay. *(Check with Salina what to list for Track B.)*
+- What Codex built: the shield engine, the Leak Gauntlet scoring and runner, the private watchlist and rules compiler (Track A); the Twitch bot, chat commands, overlay and dashboard (Track B).
 - CI on every push: typecheck + tests, including an OCR accuracy test on a real macOS runner.
 
 ## Twitch integration to show
@@ -75,15 +77,15 @@ Show, don't tell: the Codex threads on screen (session IDs in `codex-sessions.md
 ## Don't
 
 - **Don't show anything real.** Close the real `.env`, password manager, email and DMs. Use fake keys and a fake address (the Gauntlet once read a real password from an editor left open behind it). Never show the OBS stream key.
-- Don't claim what isn't built: Windows. *(Dashboard and per-leak Twitchy reactions: only if Salina has them working.)*
+- Don't claim what isn't built: Windows.
 - Don't say "blur": masks are opaque boxes.
 - Don't say "100% safe": say "37 out of 37 in our test".
 
 ## Shots to capture
 
-- [ ] Screen recording of OBS program view (what viewers see) and, side by side, the undelayed content (what the streamer sees)
-- [ ] The Twitch channel page with the stream live and chat visible
-- [ ] Full Gauntlet run, seed 3, with the final score
-- [ ] `npm run watchlist -- add` with hidden input
-- [ ] Mod `!panic` / `!unblur` from a second account
-- [ ] Codex threads and the commit history
+- [x] Screen recording of OBS program view (what viewers see) and, side by side, the undelayed content (what the streamer sees)
+- [x] The Twitch channel page with the stream live and chat visible
+- [x] Full Gauntlet run, seed 3, with the final score
+- ~~`npm run watchlist -- add` with hidden input~~ (cut for time)
+- [x] `!panic` / `!unblur` in chat (typed from the broadcaster account; a viewer account isn't a mod)
+- [x] Codex threads and the commit history
