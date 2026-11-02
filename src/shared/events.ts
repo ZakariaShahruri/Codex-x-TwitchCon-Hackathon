@@ -63,8 +63,8 @@ export interface EventMap {
   "obs.setupResult": { requestId: string; ok: boolean; changes?: string[]; error?: string };
   /** B → B (twitch → web); a viewer cheered Twitchy shortly after a save. `by` is the viewer's login. */
   "chat.cheer": { by: string; at: number };
-  /** B → B (twitch → web); the dashboard's Twitch check. Never contains tokens or the client secret. */
-  "twitch.status": { connected: boolean; login?: string; expiresInHours?: number; error?: string; at: number };
+  /** B → B (twitch → web); the dashboard's Twitch check and stream state (`live` turns true on stream.online, false on stream.offline). Never contains tokens or the client secret. */
+  "twitch.status": { connected: boolean; live?: boolean; login?: string; expiresInHours?: number; error?: string; at: number };
 }
 
 export type EventName = keyof EventMap;

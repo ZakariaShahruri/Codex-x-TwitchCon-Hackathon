@@ -111,7 +111,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 | `obs.setup` | B → A | `{ requestId, contentScene? }` (dashboard "Set up OBS"; same idempotent setup as `npm run obs:setup`, on its own OBS connection; without `contentScene` it nests the scene that is currently live) |
 | `obs.setupResult` | A → B | `{ requestId, ok, changes?: string[], error? }` (`changes` are readable lines like `"Created scene: Twitchy Raw"`; `error` never includes the OBS password) |
 | `chat.cheer` | B → B | `{ by, at }` (Twitch → overlay: a viewer cheered Twitchy shortly after a save) |
-| `twitch.status` | B → B | `{ connected, login?, expiresInHours?, error?, at }` (Twitch → dashboard setup check; never tokens) |
+| `twitch.status` | B → B | `{ connected, live?, login?, expiresInHours?, error?, at }` (Twitch → dashboard setup check and stream state: `live` is true after `stream.online`, false after `stream.offline`, which triggers the private end-of-stream report; never tokens) |
 
 - `kind`: `'api_key' | 'email' | 'password' | 'phone' | 'card' | 'ip' | 'seed_phrase' | 'qr_code' | 'watchlist' | 'custom_rule' | 'sensitive_region'`
 - `box`: canvas pixels
