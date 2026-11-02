@@ -6,6 +6,7 @@ export interface PlannedCase {
   kind: GauntletCase["kind"];
   context: string;
   displayText: string;
+  image?: string;
   label: string;
   x: number;
   y: number;
@@ -56,7 +57,8 @@ export function createGauntletPlan(seed: number): PlannedCase[] {
       id: item.id,
       kind: item.kind,
       context: `${["Terminal · zsh", "Editor · .env", "Browser · settings.json", "Direct message · friend"][index % 4]} · ${item.context}`,
-      displayText: styles[index % styles.length] === "terminal" ? `$ ${item.text}` : item.text,
+      displayText: styles[index % styles.length] === "terminal" && !item.image ? `$ ${item.text}` : item.text,
+      ...(item.image ? { image: item.image } : {}),
       label,
       width,
       x: 2 + Math.round(random() * (96 - width - 2)),

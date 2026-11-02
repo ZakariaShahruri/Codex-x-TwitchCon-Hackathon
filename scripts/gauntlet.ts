@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -8,10 +9,12 @@ import { EventBus } from "../src/shared/bus.js";
 import { loadConfig } from "../src/shared/config.js";
 import type { Box, LeakKind } from "../src/shared/events.js";
 import type { StopTrack } from "../src/shared/track.js";
-import { start as startShield } from "../src/shield/index.js";
+import { startShield } from "../src/shield/index.js";
 import { start as startTwitch } from "../src/twitch/index.js";
 import { start as startWeb } from "../src/web/index.js";
+import { gauntletWatchlist } from "../tools/gauntlet/cases.js";
 import { createGauntletPlan } from "../tools/gauntlet/plan.js";
+import { WatchlistStore } from "../src/shield/watchlist/store.js";
 import { scoreGauntlet, type GauntletClearEvent, type GauntletLeakEvent, type GauntletRunCase } from "../tools/gauntlet/scoring.js";
 import { briefScenes, inspectScenes, restoreItemTransform } from "./obs-helpers.js";
 
@@ -74,6 +77,7 @@ async function main(): Promise<void> {
   let sourceName = `Twitchy Leak Gauntlet ${process.pid}`;
   let before: Awaited<ReturnType<typeof inspectScenes>> | undefined;
   let stops: StopTrack[] = [];
+  let privateDir: string | undefined;
   let primaryError: unknown;
   const bus = new EventBus();
 
@@ -116,6 +120,12 @@ async function main(): Promise<void> {
         try { await Promise.race([shieldWarm, shutdownSignal]); } catch { send(res, 503, "Leak Gauntlet is shutting down"); return; }
         const video = await obs!.call("GetVideoSettings") as unknown as { baseWidth: number; baseHeight: number };
         send(res, 200, JSON.stringify({ cases: plan, width: video.baseWidth, height: video.baseHeight }), "application/json; charset=utf-8"); return;
+      }
+      const asset = /^\/assets\/([\w-]+\.png)$/.exec(pathname);
+      if (req.method === "GET" && asset) {
+        try { res.writeHead(200, { "content-type": "image/png", "cache-control": "no-store" }).end(await readFile(resolve("tools/gauntlet", asset[1]!))); }
+        catch { send(res, 404, "Not found"); }
+        return;
       }
       if (req.method === "GET" && pathname === "/status") { send(res, 200, JSON.stringify({ score: score ?? null }), "application/json; charset=utf-8"); return; }
       if (req.method === "POST" && pathname === "/events") {
@@ -167,7 +177,11 @@ async function main(): Promise<void> {
     const sourceId = created.sceneItemId;
     await obs.call("SetSceneItemIndex", { sceneName: CONTENT, sceneItemId: sourceId, sceneItemIndex: before[CONTENT]!.length });
 
-    stops.push(await startShield(bus, config));
+    // A throwaway watchlist with the cases' fake entries, so the streamer's real twitchy.private.json is never touched.
+    privateDir = await mkdtemp(resolve(tmpdir(), "twitchy-gauntlet-"));
+    const privateFile = resolve(privateDir, "twitchy.private.json");
+    await (await WatchlistStore.open(privateFile)).apply({ add: [...gauntletWatchlist] });
+    stops.push(await startShield(bus, config, undefined, privateFile));
     if (withTwitch) stops.push(await startTwitch(bus, config));
     stops.push(await startWeb(bus, config));
     console.log(`Leak Gauntlet page: http://127.0.0.1:${serverPort}/`);
@@ -232,6 +246,7 @@ async function main(): Promise<void> {
       await obs.disconnect();
     }
     if (server) await new Promise<void>((resolveClose) => server!.close(() => resolveClose()));
+    if (privateDir) await rm(privateDir, { recursive: true, force: true });
   }
 
   if (obs && before) {

@@ -1,4 +1,4 @@
-import type { LeakKind } from "../../src/shared/events.js";
+import type { LeakKind, WatchlistEntryInput } from "../../src/shared/events.js";
 
 export interface GauntletCase {
   id: string;
@@ -6,7 +6,15 @@ export interface GauntletCase {
   text: string;
   context: string;
   size: "normal" | "flash";
+  /** An image shown with the text, served from tools/gauntlet/ (the QR case). */
+  image?: string;
 }
+
+/** The runner's temporary watchlist: fake people and places, never the streamer's real file. */
+export const gauntletWatchlist: readonly WatchlistEntryInput[] = [
+  { label: "real name", value: "Marisol Okonkwo-Hart" },
+  { label: "home address", value: "1638 Larkspur Lane" },
+];
 
 // Token-shaped values are assembled at runtime so repository secret scanners do not
 // mistake these synthetic examples for credentials.
@@ -29,6 +37,21 @@ function tail(seed: string, length: number, alphabet = BASE62): string {
 }
 const long = (seed: string) => tail(seed, 36);
 const passphrase = (seed: string) => `Gauntlet-${tail(seed, 10)}`;
+const digits = (seed: string, length: number) => tail(seed, length, "0123456789");
+
+/** A Luhn-valid card number with the given issuer prefix, grouped the way the issuer prints it. */
+function card(seed: string, prefix: string, length: number, groups: number[]): string {
+  const body = `${prefix}${digits(seed, length - prefix.length - 1)}`;
+  let sum = 0;
+  for (let index = 0; index < body.length; index += 1) {
+    let digit = Number(body[body.length - 1 - index]);
+    if (index % 2 === 0) { digit *= 2; if (digit > 9) digit -= 9; }
+    sum += digit;
+  }
+  const number = `${body}${(10 - (sum % 10)) % 10}`;
+  let cursor = 0;
+  return groups.map((size) => number.slice(cursor, (cursor += size))).join(" ");
+}
 
 const cases: GauntletCase[] = [
   { id: "sk-project", kind: "api_key", text: token("sk-proj-", long("sk-project")), context: "OpenAI project key", size: "normal" },
@@ -56,12 +79,25 @@ const cases: GauntletCase[] = [
   { id: "password-yaml", kind: "password", text: `password: ${passphrase("password-yaml")}`, context: "YAML", size: "normal" },
   { id: "password-code", kind: "password", text: `const password = "${passphrase("password-code")}"`, context: "source code", size: "normal" },
   { id: "password-url", kind: "password", text: `DATABASE_URL=postgres://demo:${passphrase("password-url")}@db.invalid/app`, context: "URL credential", size: "normal" },
+  { id: "phone-international", kind: "phone", text: `Call me: +44 20 7946 0${digits("phone-international", 3)}`, context: "UK phone number", size: "normal" },
+  { id: "phone-north-america", kind: "phone", text: `cell (555) 01${digits("phone-north-america", 1)}-${digits("phone-na-line", 4)}`, context: "US phone number", size: "normal" },
+  { id: "phone-labeled", kind: "phone", text: `Mobile: 06 ${digits("phone-labeled", 8).replace(/(\d\d)(?=\d)/g, "$1 ")}`, context: "French mobile number", size: "normal" },
+  { id: "card-visa", kind: "card", text: `Visa ${card("card-visa", "4", 16, [4, 4, 4, 4])} exp 09/29`, context: "credit card", size: "normal" },
+  { id: "card-amex", kind: "card", text: `AMEX ${card("card-amex", "37", 15, [4, 6, 5])}`, context: "credit card", size: "normal" },
+  { id: "watchlist-name", kind: "watchlist", text: "hey Marisol Okonkwo-Hart, are you live tonight?", context: "watchlist: real name", size: "normal" },
+  { id: "watchlist-address", kind: "watchlist", text: "Ship to: 1638 Larkspur Lane, Apt 4", context: "watchlist: home address", size: "normal" },
+  { id: "qr-login", kind: "qr_code", text: "Scan to sign in on your TV", context: "device login QR code", size: "normal", image: "qr-login.png" },
   { id: "decoy-react-version", kind: null, text: "react@18.3.1", context: "package version", size: "normal" },
   { id: "decoy-password-type", kind: null, text: "password: string", context: "TypeScript type", size: "normal" },
   { id: "decoy-git-remote", kind: null, text: "git@github.com:org/repo.git", context: "SSH Git remote", size: "normal" },
   { id: "decoy-env-var", kind: null, text: "KEY=${VAR}", context: "environment variable reference", size: "normal" },
   { id: "decoy-uuid", kind: null, text: "request_id=550e8400-e29b-41d4-a716-446655440000", context: "log UUID", size: "normal" },
   { id: "decoy-redacted", kind: null, text: "password=****", context: "redacted placeholder", size: "normal" },
+  { id: "decoy-timestamp", kind: null, text: "2026-11-02 13:45:07 INFO stream started", context: "log timestamp", size: "normal" },
+  { id: "decoy-order-id", kind: null, text: "Order #4417-2290-1185 shipped", context: "order ID", size: "normal" },
+  { id: "decoy-non-luhn-card", kind: null, text: "ref 4242 4242 4242 4241", context: "16 digits, fails Luhn", size: "normal" },
+  { id: "decoy-ip", kind: null, text: "connected to 192.168.100.200:5432", context: "private IP and port", size: "normal" },
+  { id: "decoy-similar-name", kind: null, text: "hey Marissa Okonkwo-Hart, are you live?", context: "name close to the watchlist", size: "normal" },
 ];
 
 export const gauntletCases: readonly GauntletCase[] = cases;

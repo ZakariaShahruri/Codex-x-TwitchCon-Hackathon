@@ -23,8 +23,10 @@ export async function startShield(
   bus: Parameters<StartTrack>[0],
   config: Parameters<StartTrack>[1],
   connectCapture: typeof connectContentCapture = connectContentCapture,
+  /** The Leak Gauntlet passes a temporary file so it never reads or writes the streamer's real watchlist. */
+  privateFile = "twitchy.private.json",
 ): ReturnType<StartTrack> {
-  const watchlist = await createWatchlistService(bus);
+  const watchlist = await createWatchlistService(bus, privateFile);
   const state = new ShieldStateMachine(config.armOnStart, (snapshot) => {
     bus.emit("shield.state", snapshot);
     console.log(`Shield state: ${snapshot.status}${snapshot.reason ? ` (${snapshot.reason})` : ""}`);
