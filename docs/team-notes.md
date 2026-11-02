@@ -2,6 +2,10 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-03 · Smooth caret on dashboard inputs (Zakaria → Salina)
+
+- Zakaria asked for skiper-ui's skiper106 smooth caret. That's React + framer-motion, so it's ported to plain JS in `web/dashboard/smooth-caret.js` (its own `<script type="module">` after `dashboard.js`, which is unchanged) plus a few lines under the input styles in `dashboard.css`. The content-scene, watchlist label and watchlist value inputs get a purple caret that springs to the cursor; the rules textarea keeps the native caret. The native caret is hidden only on inputs the script has taken over, so if the script fails the inputs work as before. Values are only measured locally, never stored or sent.
+
 ## 2026-11-03 · Dashboard preloader (Zakaria → Salina)
 
 - A full-screen preloader (`.preloader` in `index.html`, styles above your skeleton block in `dashboard.css`) shows Twitchy blinking between the `off` and `armed` poses while the dashboard connects. It's CSS only and leaves with your `body.loading` class, so `finishLoading()` (first message, the 0.9 s minimum and the 2.5 s fallback) controls it; no JS changed. If the script never runs it fades out on its own after 4 s. It covers your skeleton while it's up; your tile reveal plays as it fades.

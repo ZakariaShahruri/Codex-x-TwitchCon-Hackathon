@@ -288,6 +288,10 @@ input, textarea {
 }
 input:focus, textarea:focus { border-color: var(--purple); }
 input::placeholder, textarea::placeholder { color: var(--faint); }
+/* Smooth caret (smooth-caret.js): the native caret hides only on inputs the script has taken over. */
+input.has-smooth-caret { caret-color: transparent; }
+.smooth-caret { position: fixed; top: 0; left: 0; z-index: 50; width: 2px; border-radius: 1px; background: var(--purple-soft); opacity: 0; pointer-events: none; will-change: transform; }
+.smooth-caret-measure { position: fixed; top: 0; left: -9999px; visibility: hidden; white-space: pre; pointer-events: none; }
 .input-action { display: flex; gap: 8px; }
 .input-action .button { flex: 0 0 auto; }
 .watchlist-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 0 14px; }
