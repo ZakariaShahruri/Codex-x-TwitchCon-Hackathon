@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
-import { WebSocket } from "ws";
+import { WebSocket, type ClientOptions } from "ws";
 import { EventBus } from "../shared/bus.js";
 import type { Config } from "../shared/config.js";
 import { redacted } from "../shared/events.js";
@@ -17,8 +17,11 @@ async function freePort(): Promise<number> {
   return port;
 }
 type Message = { event?: string; payload?: any; snapshot?: any };
-async function connect(port: number, role: "overlay" | "dashboard"): Promise<{ socket: WebSocket; messages: Message[] }> {
-  const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/${role}`);
+async function connect(port: number, role: "overlay" | "dashboard", options: { origin?: string | null; host?: string } = {}): Promise<{ socket: WebSocket; messages: Message[] }> {
+  const headers: Record<string, string> = {};
+  if (options.origin !== null) headers.Origin = options.origin ?? `http://127.0.0.1:${port}`;
+  if (options.host) headers.Host = options.host;
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/${role}`, { headers } as ClientOptions);
   const messages: Message[] = [];
   socket.on("message", (data: Buffer) => messages.push(JSON.parse(data.toString())));
   await new Promise<void>((resolve, reject) => { socket.once("open", () => resolve()); socket.once("error", reject); });
@@ -31,6 +34,9 @@ async function close(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.CLOSED) return;
   socket.close();
   await new Promise<void>((resolve) => socket.once("close", () => resolve()));
+}
+function waitForClose(socket: WebSocket): Promise<number> {
+  return new Promise((resolve) => socket.once("close", (code) => resolve(code)));
 }
 const config = (webPort: number) => ({ webPort } as Config);
 
@@ -155,6 +161,83 @@ test("resets the browser counter on stream.online and rewrites leak totals per s
     ]);
   } finally {
     await close(overlay.socket);
+    await stop();
+  }
+});
+
+test("accepts dashboard commands only on a same-origin localhost dashboard socket", async () => {
+  const bus = new EventBus();
+  const port = await freePort();
+  const stop = await start(bus, config(port));
+  const received: unknown[] = [];
+  bus.on("shield.command", (command) => { received.push(command); });
+  try {
+    const { socket: dashboard } = await connect(port, "dashboard");
+    dashboard.send(JSON.stringify({ event: "shield.command", payload: { action: "panic", by: "dashboard", at: 1 } }));
+    await settle();
+    assert.deepEqual(received, [{ action: "panic", by: "dashboard", at: 1 }]);
+    await close(dashboard);
+
+    const { socket: overlay } = await connect(port, "overlay");
+    const overlayClosed = waitForClose(overlay);
+    overlay.send(JSON.stringify({ event: "shield.command", payload: { action: "panic", by: "dashboard", at: 2 } }));
+    await overlayClosed;
+    assert.equal(received.length, 1, "overlay sockets are receive-only");
+    await close(overlay);
+  } finally { await stop(); }
+});
+
+test("rejects missing or foreign Origin and Host headers", async () => {
+  const port = await freePort();
+  const stop = await start(new EventBus(), config(port));
+  try {
+    for (const options of [
+      { origin: null },
+      { origin: "https://evil.example" },
+      { origin: `http://evil.example:${port}` },
+      { host: `evil.example:${port}` },
+    ]) {
+      await assert.rejects(connect(port, "dashboard", options));
+    }
+  } finally { await stop(); }
+});
+
+test("rejects malformed, oversized and non-allowlisted browser commands", async () => {
+  const port = await freePort();
+  const stop = await start(new EventBus(), config(port));
+  try {
+    for (const data of [
+      "not json",
+      JSON.stringify({ event: "private.state", payload: { watchlist: [], rules: [], at: 1 } }),
+      JSON.stringify({ event: "shield.command", payload: { action: "panic", by: "dashboard" } }),
+      JSON.stringify({ event: "rules.compile", payload: { requestId: "id", text: "x".repeat(20_000) } }),
+      "x".repeat(17 * 1024),
+    ]) {
+      const { socket } = await connect(port, "dashboard");
+      const closed = waitForClose(socket);
+      socket.send(data);
+      const code = await closed;
+      assert.ok(code === 1008 || code === 1009, `unexpected close code ${code}`);
+    }
+  } finally { await stop(); }
+});
+
+test("forwards valid browserCommands in-process but never logs or echoes config.updated", async () => {
+  const bus = new EventBus();
+  const port = await freePort();
+  const stop = await start(bus, config(port));
+  const delivered: unknown[] = [];
+  bus.on("config.updated", (payload) => { delivered.push(payload); });
+  let browser: WebSocket | undefined;
+  try {
+    const connected = await connect(port, "dashboard");
+    browser = connected.socket;
+    browser.send(JSON.stringify({ event: "config.updated", payload: { watchlist: { add: [{ label: "home", value: "private-secret-value" }] } } }));
+    await settle();
+    assert.deepEqual(delivered, [{ watchlist: { add: [{ label: "home", value: "private-secret-value" }] } }]);
+    assert.equal(JSON.stringify(connected.messages).includes("private-secret-value"), false);
+  } finally {
+    if (browser) await close(browser);
     await stop();
   }
 });
