@@ -12,7 +12,7 @@ Return:
 - terms: exact phrases to hide (names, usernames, addresses, codes the streamer wrote out). Include common variants the streamer implies (first name alone, a nickname), but not ordinary words.
 - patterns: JavaScript regular expressions (no slashes or flags; matched case-insensitively) for formats rather than fixed values, e.g. a student ID "r" + 7 digits -> "\\br\\d{7}\\b". Keep them specific; never match ordinary words. No nested quantifiers or backreferences.
 - positiveExamples: 3 realistic screen lines that must be hidden.
-- negativeExamples: 3 realistic, similar-looking screen lines that must stay visible.
+- negativeExamples: 3 realistic, similar-looking screen lines that must stay visible. They must not contain any of the terms.
 Use terms or patterns or both; leave the other array empty.`;
 
 const SCHEMA = {
@@ -90,7 +90,8 @@ export async function compileRule(text: string, options: CompileOptions): Promis
     const result = validateDraft(draft);
     if ("rule" in result || !draft.supported) return result;
     lastError = result.error;
-    messages.push({ role: "assistant", content: JSON.stringify(draft) }, { role: "user", content: `That rule failed Twitchy's check: ${result.error}. Fix it and answer again.` });
+    const example = result.example === undefined ? "" : ` (${JSON.stringify(result.example)})`;
+    messages.push({ role: "assistant", content: JSON.stringify(draft) }, { role: "user", content: `That rule failed Twitchy's check: ${result.error}${example}. Fix it and answer again.` });
   }
   return { error: `Twitchy couldn't make a safe rule from that: ${lastError || "out of time"}. Try wording it more specifically.` };
 }

@@ -54,8 +54,11 @@ function patternProblem(source: string): string | undefined {
   return undefined;
 }
 
-/** Checks a draft and returns the rule to save, or the reason to tell the model (and then the streamer). */
-export function validateDraft(draft: RuleDraft): { rule: ValidRule } | { error: string } {
+/**
+ * Checks a draft and returns the rule to save, or the reason to tell the streamer. `example` names the model's own example
+ * that failed, for the retry only: it can contain the private words, so it is never shown.
+ */
+export function validateDraft(draft: RuleDraft): { rule: ValidRule } | { error: string; example?: string } {
   if (!draft.supported) return { error: draft.reason.trim().slice(0, 200) || "Twitchy can only hide text it can read on screen." };
   const terms = [...new Set(draft.terms.map((term) => term.trim()).filter(Boolean))];
   const patterns = [...new Set(draft.patterns.map((pattern) => pattern.trim()).filter(Boolean))];
@@ -79,8 +82,11 @@ export function validateDraft(draft: RuleDraft): { rule: ValidRule } | { error: 
   const negatives = draft.negativeExamples.map((text) => text.trim()).filter(Boolean);
   if (positives.length < 2 || negatives.length < 2) return { error: "the rule needs at least two examples to hide and two to leave alone" };
   const missed = positives.find((text) => !matches(rule, text));
-  if (missed !== undefined) return { error: `the rule does not catch one of its own examples to hide` };
-  if (negatives.some((text) => matches(rule, text))) return { error: "the rule catches one of its own examples to leave alone" };
+  if (missed !== undefined) return { error: "the rule does not catch one of its own examples to hide", example: missed };
+  // Phrases are the streamer's own words; the examples to leave alone test the patterns, which the model invented.
+  const patternsOnly: ValidRule = { ...rule, terms: [] };
+  const caught = patterns.length ? negatives.find((text) => matches(patternsOnly, text)) : undefined;
+  if (caught !== undefined) return { error: "the rule catches one of its own examples to leave alone", example: caught };
   if (EVERYDAY_SCREEN.some((text) => matches(rule, text))) return { error: "the rule is too broad: it would hide ordinary stream text" };
   return { rule };
 }

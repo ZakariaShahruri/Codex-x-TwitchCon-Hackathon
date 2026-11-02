@@ -66,7 +66,7 @@ test("validation rejects unsafe, broad, leaky or self-contradicting drafts", () 
     [{ description: "Rosalind Achterberg" }, /description repeats/],
     [{ positiveExamples: ["nothing to see"] }, /at least two/],
     [{ positiveExamples: ["call Rosalind later", "nothing here at all"] }, /does not catch/],
-    [{ negativeExamples: ["call Rosalind later", "fine"] }, /catches one of its own examples to leave alone/],
+    [{ ...studentIdRule, negativeExamples: ["login r7654321 failed", "fine"] }, /catches one of its own examples to leave alone/],
     [{ terms: ["Settings"], positiveExamples: ["Settings saved", "Open Settings"], negativeExamples: ["Saved", "Open"] }, /too broad/],
   ];
   for (const [change, expected] of cases) {
@@ -94,6 +94,14 @@ test("compiler retries once with the validation error, then succeeds", async () 
   assert.equal(seen[0]!.model, "test-model");
   assert.equal(seen[0]!.response_format.type, "json_schema");
   assert.match(seen[1]!.messages.at(-1)!.content, /description repeats/);
+
+  // The streamer's own phrases may appear in an example to leave alone; the retry quotes a failing example to the model.
+  assert.ok("rule" in validateDraft({ ...momRule, negativeExamples: ["Rosalind is a character in the book", "fine"] }));
+  const retried: typeof seen = [];
+  await compileRule("hide my student ID", {
+    apiKey: "k", model: "m", fetch: fakeOpenAI([{ ...studentIdRule, negativeExamples: ["login r7654321 failed", "fine"] }, studentIdRule], retried),
+  });
+  assert.match(retried[1]!.messages.at(-1)!.content, /leave alone \("login r7654321 failed"\)/);
 });
 
 test("compiler errors are readable and never contain the key or the rule text", async () => {

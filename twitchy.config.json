@@ -7,5 +7,5 @@
   "sensitiveRegions": [],
   "armOnStart": true,
   "webPort": 4173,
-  "rulesModel": "gpt-4o-mini"
+  "rulesModel": "gpt-5.4-mini"
 }
