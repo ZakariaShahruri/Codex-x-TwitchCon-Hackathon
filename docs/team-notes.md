@@ -2,6 +2,11 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-02 · `!unblur` never unmasks the watchlist (Zakaria → Salina)
+
+- Like sensitive regions, watchlist matches now stay masked through `!unblur`, so there's no `leak.cleared` for them. Dismissing ignores a match for the whole session, and one mod's `!unblur` would otherwise leave the streamer's address unmasked until restart. To stop masking an entry, remove it from the watchlist.
+- No event shapes changed; nothing to do.
+
 ## 2026-11-02 · Personal watchlist storage (Zakaria → Salina)
 
 - Track A now consumes the existing `config.updated.watchlist` add/remove payload, stores values only in gitignored `twitchy.private.json`, and emits `private.state` with IDs and labels only at startup and after updates. Watchlist leak previews are `watchlist: <label>`; labels containing any part of a stored value are rejected to keep previews safe.

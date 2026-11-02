@@ -122,7 +122,7 @@ Defined in `src/shared/events.ts`. The tracks talk **only** through these events
 ### Command semantics
 - `on` / `off`: arm or disarm detection. Masks already placed still expire normally.
 - `panic`: full-canvas mask immediately; stays until `unblur`.
-- `unblur`: during a panic, lifts the panic only; secrets detected under it stay masked. Otherwise dismisses what is masked right now as a false positive and ignores that text for this session. Secrets masked earlier but no longer on screen are never ignored, and configured sensitive regions always stay masked.
+- `unblur`: during a panic, lifts the panic only; secrets detected under it stay masked. Otherwise dismisses what is masked right now as a false positive and ignores that text for this session. Secrets masked earlier but no longer on screen are never ignored, and configured sensitive regions and watchlist entries always stay masked (dismissing ignores a fingerprint for the whole session, and a watchlist entry's fingerprint is the entry itself).
 - Only the broadcaster and moderators can issue commands (checked by badge on the chat message).
 
 ---

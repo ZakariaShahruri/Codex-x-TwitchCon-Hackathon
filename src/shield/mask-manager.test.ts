@@ -196,6 +196,16 @@ test("unblur dismisses only what is masked now, never earlier secrets or sensiti
   assert.deepEqual(shown, [{ x: 6, y: 6, w: 48, h: 18 }, { x: 296, y: 196, w: 58, h: 58 }]);
 });
 
+test("unblur never dismisses a watchlist entry, so its later sightings stay masked", async () => {
+  const backend = new FakeMasks();
+  const masks = manager(backend);
+  const address = leak("watchlist-entry-home", { x: 100, y: 100, w: 80, h: 10 }, "watchlist");
+  await masks.update([address], 0);
+  await masks.unblur();
+  assert.equal(masks.isIgnored("watchlist-entry-home"), false);
+  assert.equal(backend.enabled.size, 1);
+});
+
 test("unblur is serialized after an in-flight placement and cannot be undone by it", async () => {
   const state = new FakeMasks();
   let release!: () => void;

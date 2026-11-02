@@ -1,6 +1,12 @@
 import type { Box } from "../shared/events.js";
 import type { LeakCandidate } from "./detectors/types.js";
 
+/**
+ * The streamer chose these, so a mod's `!unblur` never unmasks them: dismissing ignores a fingerprint for the
+ * whole session, and a watchlist entry's fingerprint is the entry itself (every later sighting of the address).
+ */
+const NEVER_DISMISSED = new Set<LeakCandidate["kind"]>(["sensitive_region", "watchlist"]);
+
 export interface MaskBackend {
   place(maskId: string, box: Box): Promise<void>;
   enable(maskId: string, enabled: boolean): Promise<void>;
@@ -200,7 +206,7 @@ export class MaskManager {
         } else {
           const item: ActiveBox = {
             fingerprint: candidate.fingerprint, box: { ...candidate.box }, expiresAt: Number.POSITIVE_INFINITY, padded: false,
-            dismissable: candidate.kind !== "sensitive_region", absentFrames: 0, uncertain: false,
+            dismissable: !NEVER_DISMISSED.has(candidate.kind), absentFrames: 0, uncertain: false,
           };
           this.active.push(item);
           used.add(item);
