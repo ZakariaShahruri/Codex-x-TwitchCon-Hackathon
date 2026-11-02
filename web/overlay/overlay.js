@@ -1,16 +1,19 @@
+import { safeCheerName } from "./cheer-utils.js";
+
 const CANVAS_WIDTH = 1920;
 const CANVAS_HEIGHT = 1080;
 const MASCOT_SIZE = 176;
 const MASCOT_MARGIN = 36;
 const MAX_PENDING_SAVES = 2;
+const CHEER_MERGE_MS = 450;
 const SPRITE_URL = "/overlay/assets/twitchy.svg";
 const REACTIONS = {
-  shield: { kinds: ["api_key", "password", "custom_rule"], duration: 500, quick: 170, label: "BASH!" },
-  envelope: { kinds: ["email", "phone"], duration: 620, quick: 180, label: "ZIPP!" },
-  house: { kinds: ["watchlist", "ip"], duration: 620, quick: 180, label: "HIDE!" },
-  chomp: { kinds: ["qr_code"], duration: 560, quick: 170, label: "NOM!" },
-  vault: { kinds: ["card", "seed_phrase", "sensitive_region"], duration: 620, quick: 180, label: "SAFE!" },
-  generic: { kinds: [], duration: 300, quick: 140, label: "BLOCKED!" },
+  shield: { kinds: ["api_key", "password", "custom_rule"], duration: 1_000, quick: 170, label: "BASH!" },
+  envelope: { kinds: ["email", "phone"], duration: 1_000, quick: 180, label: "ZIPP!" },
+  house: { kinds: ["watchlist", "ip"], duration: 1_000, quick: 180, label: "HIDE!" },
+  chomp: { kinds: ["qr_code"], duration: 1_000, quick: 170, label: "NOM!" },
+  vault: { kinds: ["card", "seed_phrase", "sensitive_region"], duration: 1_000, quick: 180, label: "SAFE!" },
+  generic: { kinds: [], duration: 1_000, quick: 140, label: "BLOCKED!" },
 };
 const REACTION_BY_KIND = new Map(Object.entries(REACTIONS).flatMap(([name, reaction]) => reaction.kinds.map((kind) => [kind, name])));
 const stage = document.querySelector("#stage");
@@ -18,8 +21,13 @@ const twitchy = document.querySelector("#twitchy");
 const mascotPose = document.querySelector("#mascot-pose");
 const counter = document.querySelector("#counter");
 const countNode = document.querySelector("#count");
+const counterCopy = document.querySelector("#counter-copy");
 const cover = document.querySelector("#cover");
+const cheerBubble = document.querySelector("#cheer-bubble");
+const cheerName = document.querySelector("#cheer-name");
+const cheerCount = document.querySelector("#cheer-count");
 const queue = [];
+const cheerQueue = [];
 let scaleX = 1;
 let scaleY = 1;
 let uiScale = 1;
@@ -30,6 +38,12 @@ let running = false;
 let runVersion = 0;
 let reconnectTimer;
 let wakePause;
+let pendingCheers;
+let cheerBatchTimer;
+let cheerAnimationTimer;
+let cheerRunning = false;
+let activeCheers;
+let cheerVersion = 0;
 let currentPosition = homePosition();
 
 function pause(duration) {
@@ -66,6 +80,7 @@ function sendHomeAndClearQueue() {
   runVersion += 1;
   queue.length = 0;
   wakePause?.();
+  clearCheerQueue();
   cover.classList.remove("play");
   cover.style.display = "none";
   setAction();
@@ -79,6 +94,7 @@ function resetToSnapshot() {
   runVersion += 1;
   queue.length = 0;
   wakePause?.();
+  clearCheerQueue();
   cover.classList.remove("play");
   cover.style.display = "none";
   setAction();
@@ -113,6 +129,7 @@ function setCount(value, animate = false, exact = false) {
   const changed = shown !== totalBlocked;
   totalBlocked = shown;
   countNode.textContent = String(totalBlocked);
+  counterCopy.textContent = `${totalBlocked === 1 ? "leak" : "leaks"} blocked this stream`;
   if (animate && changed) {
     counter.animate(
       [{ transform: "scale(1)" }, { transform: "scale(1.105)", offset: .42 }, { transform: "scale(.98)", offset: .72 }, { transform: "scale(1)" }],
@@ -192,7 +209,74 @@ async function playQueue() {
   } finally {
     running = false;
     if (queue.length) void playQueue();
+    else startNextCheer();
   }
+}
+
+function stopCheer(requeue) {
+  if (!cheerRunning) return;
+  clearTimeout(cheerAnimationTimer);
+  cheerAnimationTimer = undefined;
+  if (requeue && activeCheers) cheerQueue.unshift(activeCheers);
+  activeCheers = undefined;
+  cheerRunning = false;
+  cheerVersion += 1;
+  cheerBubble.hidden = true;
+  if (twitchy.dataset.action === "cheer") setAction();
+}
+
+function clearCheerQueue() {
+  clearTimeout(cheerBatchTimer);
+  cheerBatchTimer = undefined;
+  pendingCheers = undefined;
+  cheerQueue.length = 0;
+  stopCheer(false);
+}
+
+function startNextCheer() {
+  if (cheerRunning || running || queue.length || !cheerQueue.length || stateStatus === "panic" || stateStatus === "off") return;
+  const group = cheerQueue.shift();
+  if (!group) return;
+  activeCheers = group;
+  cheerRunning = true;
+  const version = ++cheerVersion;
+  cheerName.textContent = safeCheerName(group.name);
+  cheerCount.textContent = group.count > 1 ? `+${group.count}` : "";
+  cheerBubble.hidden = false;
+  setAction("cheer", 650);
+  cheerAnimationTimer = setTimeout(() => {
+    if (version !== cheerVersion) return;
+    cheerRunning = false;
+    activeCheers = undefined;
+    cheerBubble.hidden = true;
+    if (twitchy.dataset.action === "cheer") setAction();
+    startNextCheer();
+  }, 650);
+}
+
+function flushPendingCheers() {
+  cheerBatchTimer = undefined;
+  if (!pendingCheers) return;
+  const group = pendingCheers;
+  pendingCheers = undefined;
+  if (stateStatus === "panic" || stateStatus === "off") return;
+  if (running || queue.length) {
+    const waiting = cheerQueue[cheerQueue.length - 1];
+    if (waiting) waiting.count = Math.min(99, waiting.count + group.count);
+    else cheerQueue.push(group);
+    return;
+  }
+  cheerQueue.push(group);
+  startNextCheer();
+}
+
+function queueCheer(login) {
+  if (stateStatus === "panic" || stateStatus === "off") return;
+  if (!pendingCheers) {
+    pendingCheers = { name: safeCheerName(login), count: 0 };
+    cheerBatchTimer = setTimeout(flushPendingCheers, CHEER_MERGE_MS);
+  }
+  pendingCheers.count = Math.min(99, pendingCheers.count + 1);
 }
 
 function handleMessage(message) {
@@ -205,7 +289,9 @@ function handleMessage(message) {
   }
   if (!message?.event || !message.payload) return;
   if (message.event === "shield.state") setState(message.payload);
+  if (message.event === "chat.cheer") queueCheer(message.payload.by);
   if (message.event === "leak.detected") {
+    if (cheerRunning) stopCheer(true);
     latestLeakCount = Math.max(latestLeakCount, message.payload.totalBlocked);
     if (stateStatus === "panic" || stateStatus === "off") {
       setCount(latestLeakCount);

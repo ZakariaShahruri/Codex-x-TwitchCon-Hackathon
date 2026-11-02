@@ -55,6 +55,12 @@ async function runCycle() {
   for (let index = 0; index < scenarios.length; index += 1) {
     const leak = scenarios[index]!;
     bus.emit("leak.detected", { ...leak, id: `${leak.id}-${base}`, preview: redacted(leak.preview), totalBlocked: ++totalBlocked, at: at() });
+    if (index === 1) {
+      for (const by of ["nina", "pixelpup", "sammy"] as const) {
+        bus.emit("chat.cheer", { by, at: at() });
+        await delay(140);
+      }
+    }
     await delay(1_500);
   }
   for (const leak of scenarios) {

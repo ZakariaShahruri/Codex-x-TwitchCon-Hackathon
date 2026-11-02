@@ -2,6 +2,11 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-02 · Chat cheers for saves (Salina → Zakaria)
+
+- Twitch emits the existing `chat.cheer { by, at }` event for `!cheer`, `GG`, `PogChamp`, `<3` and "good job Twitchy" within 10 seconds after a save. It allows one cheer per viewer per save and caps accepted cheers at three per second.
+- The overlay merges close cheers into one queued heart reaction after saves; each cheered save gets at most one count-only chat summary. No shared event shapes changed.
+
 ## 2026-11-02 · Tier 2 contract events (Salina ↔ Zakaria)
 
 - **Contract change, agreed by both.** New events in `src/shared/events.ts`: `obs.setup` (B → A, `{ requestId, contentScene? }`), `obs.setupResult` (A → B, `{ requestId, ok, changes?: string[], error? }`), `chat.cheer` and `twitch.status` (both B → B). Nothing existing changed.
