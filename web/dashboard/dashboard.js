@@ -12,6 +12,63 @@ let liveState;
 let savedPrivateState;
 let twitchStatus;
 let lastMetricAt = 0;
+const SPARK_POINTS = 40;
+const sparkSamples = [];
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Counts a number up or down to its new value instead of jumping. */
+function countTo(el, to, { decimals = 0, suffix = "", duration = 600 } = {}) {
+  const from = Number(el.dataset.value);
+  el.dataset.value = String(to);
+  const format = (value) => `${value.toFixed(decimals)}${suffix}`;
+  cancelAnimationFrame(Number(el.dataset.frame));
+  if (!Number.isFinite(from) || from === to || reduceMotion()) { el.textContent = format(to); return; }
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - (1 - t) ** 3;
+    el.textContent = format(from + (to - from) * eased);
+    if (t < 1) el.dataset.frame = String(requestAnimationFrame(step));
+  };
+  el.dataset.frame = String(requestAnimationFrame(step));
+}
+
+/** Briefly highlights a value that just changed. */
+function bump(el) {
+  el.classList.remove("bump");
+  void el.offsetWidth;
+  el.classList.add("bump");
+}
+
+function resetNumber(el) {
+  cancelAnimationFrame(Number(el.dataset.frame));
+  delete el.dataset.value;
+  el.textContent = "—";
+}
+
+/** Live latency chart: last frame times, drawn as a line + area, with a hover tooltip. */
+function renderSpark(budgetMs) {
+  const svg = $("#latency-spark");
+  if (!svg) return;
+  const width = 300;
+  const height = 72;
+  const max = Math.max(budgetMs || 0, ...sparkSamples) * 1.1 || 1;
+  const x = (index) => sparkSamples.length < 2 ? width : (index / (SPARK_POINTS - 1)) * width + (SPARK_POINTS - sparkSamples.length) / (SPARK_POINTS - 1) * width;
+  const y = (value) => height - (value / max) * (height - 6) - 3;
+  const points = sparkSamples.map((value, index) => [x(index), y(value)]);
+  const line = points.map(([px, py], index) => `${index ? "L" : "M"}${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
+  svg.querySelector(".spark-line").setAttribute("d", line);
+  svg.querySelector(".spark-area").setAttribute("d", points.length ? `${line} L${points.at(-1)[0].toFixed(1)},${height} L${points[0][0].toFixed(1)},${height} Z` : "");
+  const budgetY = y(budgetMs || 0);
+  const budget = svg.querySelector(".spark-budget");
+  budget.setAttribute("y1", budgetY.toFixed(1));
+  budget.setAttribute("y2", budgetY.toFixed(1));
+  const last = points.at(-1);
+  const dot = svg.querySelector(".spark-dot");
+  if (last) { dot.setAttribute("cx", last[0].toFixed(1)); dot.setAttribute("cy", last[1].toFixed(1)); dot.style.opacity = "1"; }
+  else dot.style.opacity = "0";
+  svg.dataset.points = JSON.stringify(points.map(([px], index) => [px, sparkSamples[index]]));
+}
 
 const timestamp = (value) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const shortDuration = (ms) => ms < 1_000 ? `${Math.max(0, Math.round(ms))} ms` : `${(ms / 1_000).toFixed(1)} s`;
@@ -143,7 +200,10 @@ function setMetrics(metrics) {
   if (!metrics || ![metrics.lastFrameMs, metrics.p95FrameMs, metrics.budgetMs, metrics.framesPerSec, metrics.at].every(Number.isFinite)) return;
   lastMetrics = metrics;
   lastMetricAt = Date.now();
+  sparkSamples.push(metrics.lastFrameMs);
+  if (sparkSamples.length > SPARK_POINTS) sparkSamples.shift();
   updateMetrics();
+  renderSpark(metrics.budgetMs);
 }
 
 function updateMetrics() {
@@ -152,12 +212,14 @@ function updateMetrics() {
   if (!lastMetrics || Date.now() - lastMetricAt >= METRICS_STALE_MS) {
     health.dataset.health = "none";
     health.textContent = "No metrics";
-    $("#hero-latency").textContent = "—";
+    resetNumber($("#hero-latency"));
     $("#hero-latency").className = "";
-    $("#metric-p95").textContent = "—";
+    resetNumber($("#metric-p95"));
     $("#metric-budget").textContent = "—";
-    $("#metric-last").textContent = "—";
-    $("#metric-fps").textContent = "—";
+    resetNumber($("#metric-last"));
+    resetNumber($("#metric-fps"));
+    sparkSamples.length = 0;
+    renderSpark(0);
     $("#metric-updated").textContent = "No metrics yet · waiting for the shield";
     track.dataset.health = "none";
     $("#latency-fill").style.width = "0%";
@@ -168,12 +230,12 @@ function updateMetrics() {
   health.dataset.health = healthLevel;
   health.textContent = healthLevel === "good" ? "On budget" : healthLevel === "warn" ? "Near budget" : "Over budget";
   track.dataset.health = healthLevel;
-  $("#metric-p95").textContent = p95FrameMs.toFixed(1);
-  $("#hero-latency").textContent = `${Math.round(p95FrameMs)} ms`;
+  countTo($("#metric-p95"), p95FrameMs, { decimals: 1 });
+  countTo($("#hero-latency"), Math.round(p95FrameMs), { suffix: " ms" });
   $("#hero-latency").className = healthLevel === "bad" ? "is-bad" : "is-good";
   $("#metric-budget").textContent = budgetMs.toFixed(0);
-  $("#metric-last").textContent = lastFrameMs.toFixed(1);
-  $("#metric-fps").textContent = framesPerSec.toFixed(1);
+  countTo($("#metric-last"), lastFrameMs, { decimals: 1, duration: 400 });
+  countTo($("#metric-fps"), framesPerSec, { decimals: 1, duration: 400 });
   $("#metric-updated").textContent = `Updated ${timestamp(at)}`;
   $("#latency-fill").style.width = `${Math.min(100, Math.max(0, budgetMs ? p95FrameMs / budgetMs * 100 : 0))}%`;
 }
@@ -183,7 +245,8 @@ function renderLeaks(animateId) {
   list.replaceChildren();
   const rows = [...leaks.values()].slice(-MAX_LOG_ROWS).reverse();
   $("#leak-total").textContent = `${leaks.size} ${leaks.size === 1 ? "save" : "saves"}`;
-  $("#hero-saves").textContent = String(leaks.size);
+  const heroSaves = $("#hero-saves");
+  if (Number(heroSaves.dataset.value ?? 0) !== leaks.size) { countTo(heroSaves, leaks.size, { duration: 450 }); bump(heroSaves); bump($("#leak-total")); }
   if (!rows.length) {
     list.append(emptyRow("When Twitchy catches something, it shows up here, redacted."));
     return;
@@ -233,17 +296,26 @@ function showReport() {
   for (const leak of records) counts.set(leak.kind, (counts.get(leak.kind) ?? 0) + 1);
   const title = document.createElement("strong");
   title.className = "report-summary";
-  title.textContent = `${records.length} ${records.length === 1 ? "save" : "saves"} this stream`;
+  const titleCount = document.createElement("span");
+  title.append(titleCount, ` ${records.length === 1 ? "save" : "saves"} this stream`);
+  countTo(titleCount, records.length, { duration: 900 });
   const list = document.createElement("ul");
   list.className = "report-list";
+  const maxCount = Math.max(1, ...counts.values());
   if (counts.size) {
-    for (const [kind, count] of counts) {
+    for (const [kind, count] of [...counts].sort((a, b) => b[1] - a[1])) {
       const item = document.createElement("li");
       const icon = makePixelIcon(leakPose(kind));
       const label = document.createElement("span");
       label.textContent = kindLabel(kind);
       const score = document.createElement("strong");
       score.textContent = `${count} ${count === 1 ? "save" : "saves"}`;
+      const bar = document.createElement("span");
+      bar.className = "report-bar";
+      const fill = document.createElement("i");
+      fill.style.setProperty("--share", `${(count / maxCount) * 100}%`);
+      bar.append(fill);
+      label.append(bar);
       item.append(icon, label, score);
       list.append(item);
     }
@@ -446,4 +518,21 @@ setShieldState({ status: "off" });
 setConnection(false);
 updateMetrics();
 setInterval(updateMetrics, 500);
+const spark = $("#latency-spark");
+spark?.addEventListener("pointermove", (event) => {
+  const points = JSON.parse(spark.dataset.points || "[]");
+  if (!points.length) return;
+  const box = spark.getBoundingClientRect();
+  const px = ((event.clientX - box.left) / box.width) * 300;
+  const [nearX, value] = points.reduce((best, point) => Math.abs(point[0] - px) < Math.abs(best[0] - px) ? point : best);
+  const tip = $("#spark-tip");
+  tip.hidden = false;
+  tip.textContent = `${value.toFixed(1)} ms`;
+  tip.style.left = `${(nearX / 300) * 100}%`;
+  spark.querySelector(".spark-cursor").setAttribute("x1", nearX.toFixed(1));
+  spark.querySelector(".spark-cursor").setAttribute("x2", nearX.toFixed(1));
+  spark.classList.add("hovering");
+});
+spark?.addEventListener("pointerleave", () => { $("#spark-tip").hidden = true; spark.classList.remove("hovering"); });
+
 connect();

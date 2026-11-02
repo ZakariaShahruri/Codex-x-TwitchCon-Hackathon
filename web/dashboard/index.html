@@ -50,6 +50,18 @@
         <div class="section-heading"><div><p class="eyebrow">Live engine</p><h2>Latency</h2></div><span id="metric-health" class="health-badge" data-health="none">No metrics</span></div>
         <div class="metric-main"><strong id="metric-p95">—</strong><span>ms p95 · budget <b id="metric-budget">—</b> ms</span></div>
         <div class="latency-track"><span id="latency-fill"></span><i></i></div>
+        <div class="spark">
+          <svg id="latency-spark" viewBox="0 0 300 72" preserveAspectRatio="none" role="img" aria-label="Frame time over the last 40 seconds">
+            <defs><linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9146ff" stop-opacity=".35"/><stop offset="1" stop-color="#9146ff" stop-opacity="0"/></linearGradient></defs>
+            <line class="spark-budget" x1="0" x2="300" y1="0" y2="0"/>
+            <path class="spark-area" d=""/>
+            <path class="spark-line" d=""/>
+            <line class="spark-cursor" x1="0" x2="0" y1="0" y2="72"/>
+            <circle class="spark-dot" r="3.5" cx="0" cy="0"/>
+          </svg>
+          <span class="spark-tip" id="spark-tip" hidden></span>
+          <span class="spark-legend"><i></i>Frame time · <b>- -</b> budget</span>
+        </div>
         <div class="metric-pairs"><div><small>Last frame</small><strong id="metric-last">—</strong><span>ms</span></div><div><small>Capture rate</small><strong id="metric-fps">—</strong><span>fps</span></div></div>
         <p class="hint" id="metric-updated">No numbers yet. Twitchy is warming up.</p>
       </section>
