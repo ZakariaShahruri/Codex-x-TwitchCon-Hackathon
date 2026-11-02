@@ -9,7 +9,7 @@ const PREFIX_PATTERNS: RegExp[] = [
   /github_pat_[A-Z0-9_]{20,}/gi,
   /glpat-[A-Z0-9_-]{20,}/gi,
   /AKIA[A-Z0-9]{16}(?![A-Z0-9])/gi,
-  /AIza[A-Z0-9_-]{35}/gi,
+  /A[I1l]za[A-Z0-9_-]{35}/gi, // Vision reads the `I` as `l` or `1`
   /xox[abprs]-[A-Z0-9-]{20,}/gi,
   /hf_[A-Z0-9]{30,}/gi,
   /npm_[A-Z0-9]{36,}/gi,

@@ -105,6 +105,10 @@ test("live Leak Gauntlet OCR damage still detects the secret", () => {
   assert.equal(detectApiKeys([line(jwt)]).length, 1);
   assert.equal(detectApiKeys([line(jwt)])[0]?.fingerprint, detectApiKeys([line(jwt.replace(/\|/g, "l"))])[0]?.fingerprint);
   assert.equal(detectApiKeys([line(`$ ${"ghu_"}wЗI6xmI80s0aCzTtDly4dc0MGKCnQyxBQNCv`)]).length, 1);
+  assert.equal(detectApiKeys([line(`${"Alza"}8fxNcUbm0QA0fRbcID8ktd314JvUPMRhJlo`)]).length, 1);
+  assert.equal(detectApiKeys([line(`${"rk_"}test_wqdNPi×3UGyT50uuxn6SanN0u9GFdia68L5f`)]).length, 1);
+  assert.equal(detectApiKeys([line("SERVICE_T0KEN=Gm1gGc66ExD8q0qvcYQ1P9QS1zcC7fuDsPRc")]).length, 1);
+  assert.equal(detectPasswords([line("PASSW0RD=Gauntlet-kFep9R6kCz")]).length, 1);
 });
 
 test("same-row OCR fragments join, other rows and distant columns do not", () => {

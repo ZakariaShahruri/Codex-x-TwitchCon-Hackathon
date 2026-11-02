@@ -2,12 +2,13 @@ import type { Box } from "../../shared/events.js";
 import type { OCRTextLine } from "../ocr/types.js";
 
 /**
- * Cyrillic and Greek letters Vision returns for look-alike Latin glyphs (seen live: `3` read as `З`).
+ * Cyrillic and Greek letters and symbols Vision returns for look-alike Latin glyphs (seen live: `3` read as `З`, `x` as `×`).
  * Each maps to one UTF-16 unit, so offsets into the text stay valid.
  */
 const HOMOGLYPHS: Record<string, string> = {
   А: "A", В: "B", Е: "E", З: "3", І: "I", К: "K", М: "M", Н: "H", О: "O", Р: "P", С: "C", Т: "T", Х: "X", Ѕ: "S", Ј: "J",
   а: "a", е: "e", о: "o", р: "p", с: "c", у: "y", х: "x", і: "i", ј: "j", ѕ: "s",
+  "×": "x",
   Α: "A", Β: "B", Ε: "E", Ζ: "Z", Η: "H", Ι: "I", Κ: "K", Μ: "M", Ν: "N", Ο: "O", Ρ: "P", Τ: "T", Υ: "Y", Χ: "X", ο: "o",
 };
 const HOMOGLYPH_PATTERN = new RegExp(`[${Object.keys(HOMOGLYPHS).join("")}]`, "gu");
