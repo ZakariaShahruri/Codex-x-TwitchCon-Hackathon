@@ -12,11 +12,11 @@ Things one track needs to know about the other's changes. Newest first. Each not
 - Track A now consumes the existing `config.updated.watchlist` add/remove payload, stores values only in gitignored `twitchy.private.json`, and emits `private.state` with IDs and labels only at startup and after updates. Watchlist leak previews are `watchlist: <label>`; labels containing any part of a stored value are rejected to keep previews safe.
 - The dashboard can send the current shared contract; no event shapes changed. `npm run watchlist -- add|list|remove <id>` manages entries before the dashboard is ready. Add prompts with hidden input; never pass a value as an argument.
 
-## 2026-11-02 · Twitch chat commands and lifecycle events (Salina → Zakaria)
+## 2026-11-02 · Track B counters and mock removal (Salina → Zakaria)
 
-- Broadcaster/moderator chat commands emit `shield.command` with the sender login in `by`; unauthorized viewers' moderation commands are silently ignored. `!twitchy` is open to everyone and reports blocked leaks plus current shield status.
-- `stream.online` emits `shield.command` with action `on` (`by: "stream.online"`), so the shield auto-arms when the stream begins. `stream.offline` posts the session leak count to chat.
-- No shared event shapes changed. For overlay-only command previews without OBS, set `TWITCHY_MOCK_SHIELD=1`; it is off by default and must not be set alongside live Track A.
+- Removed the web Track A mock: real Track A handles `shield.command` even without OBS, so running a second responder could publish conflicting shield states.
+- `stream.online` still emits `shield.command on`; web normalizes `leak.detected.totalBlocked` and reconnect snapshots to a per-stream count, matching chat's `!twitchy` and offline report.
+- Broadcaster/moderator chat commands emit `shield.command` with the sender login in `by`; unauthorized viewers' moderation commands are silently ignored. No shared event shapes changed.
 
 ## 2026-11-02 · Leak Gauntlet uses your overlay (Zakaria → Salina)
 

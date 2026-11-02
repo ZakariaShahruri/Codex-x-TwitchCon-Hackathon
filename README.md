@@ -14,13 +14,14 @@ npm run dev
 
 Run the shared foundation checks with `npm test` and `npm run typecheck`. The shared loader allows service credentials to be absent; tracks validate credentials when they use those services.
 
-## Twitch chat token
+## Run Track B
 
-Install and configure the [Twitch CLI](https://dev.twitch.tv/docs/cli/) with your Twitch app's client ID and client secret. Register `http://localhost:3000` as an OAuth redirect URL for the app. Then sign in as the bot account and request a user token with the chat scopes:
+Configure the [Twitch CLI](https://dev.twitch.tv/docs/cli/) with the bot app's client ID and secret using `twitch configure`. On macOS, the CLI keeps these credentials in `$HOME/.twitch-cli/.twitch-cli.env`; keep that file private. Sign in as the bot account and request the chat token:
 
 ```sh
-twitch configure
 twitch token --user-token --scopes "user:read:chat user:write:chat user:bot"
 ```
 
-Copy the returned access token to `TWITCH_BOT_TOKEN` and the refresh token to `TWITCH_BOT_REFRESH_TOKEN` in `.env`, and the app's client secret to `TWITCH_CLIENT_SECRET` (access tokens expire after about 4 hours; these two let the bot renew its own token), and set `TWITCH_BOT_USER_ID`, `TWITCH_BROADCASTER_ID`, and `TWITCH_CLIENT_ID`. Never commit the token or app secret. If the bot account is not the broadcaster, make it a moderator in the channel or have the broadcaster grant the app `channel:bot` authorization.
+Put the returned access token in `TWITCH_BOT_TOKEN`, its refresh token in `TWITCH_BOT_REFRESH_TOKEN`, and the app secret in `TWITCH_CLIENT_SECRET` in `.env`. Also set `TWITCH_CLIENT_ID`, `TWITCH_BOT_USER_ID`, and `TWITCH_BROADCASTER_ID`. Track B validates the access token and renews it in memory before expiry; it never logs credentials. If the bot is not the broadcaster, make it a moderator or have the broadcaster grant the app `channel:bot` authorization.
+
+Run `npm run dev` and add `http://127.0.0.1:4173/overlay/` as a transparent OBS Browser Source. `npm run demo:events` previews the web track without Twitch or OBS. `npm run gauntlet` starts its own shield and web tracks and drives roughly 28 leak events over a minute; stop `npm run dev` first because both use the configured `webPort`. Add `-- --with-twitch` only when you want the gauntlet connected to Twitch chat.
