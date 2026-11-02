@@ -16,9 +16,9 @@ const SPARK_POINTS = 40;
 const sparkSamples = [];
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** Counts a number up or down to its new value instead of jumping. */
+/** Counts a number up or down to its new value instead of jumping (from 0 the first time it gets one). */
 function countTo(el, to, { decimals = 0, suffix = "", duration = 600 } = {}) {
-  const from = Number(el.dataset.value);
+  const from = Number(el.dataset.value ?? 0);
   el.dataset.value = String(to);
   const format = (value) => `${value.toFixed(decimals)}${suffix}`;
   cancelAnimationFrame(Number(el.dataset.frame));
@@ -509,7 +509,10 @@ $("#watchlist-form").addEventListener("submit", (event) => {
   if (sent) { labelInput.value = ""; labelInput.focus(); }
 });
 
-$("#show-report").addEventListener("click", showReport);
+$("#show-report").addEventListener("click", () => {
+  showReport();
+  $("#report-panel").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "nearest" });
+});
 
 $("#compile-rule").addEventListener("click", () => {
   const text = $("#rule-text").value.trim();

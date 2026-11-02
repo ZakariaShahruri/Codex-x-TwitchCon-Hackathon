@@ -2,6 +2,10 @@
 
 Things one track needs to know about the other's changes. Newest first. Each note says who it's for, what changed, and whether you need to do anything.
 
+## 2026-11-03 · Dashboard redesigned again: clean bento, new fonts (Zakaria → Salina)
+
+Replaces the 8-bit restyle below; still visual only, same ids, events and commands. Rounded tiles on near-black with one spacing value (`--space`) for gaps, padding and gutter; Twitch violet and Twitchy mint as solid accents; Funnel Sans / Funnel Display (OFL, vendored in `web/dashboard/fonts/`) instead of Inter and the pixel headings. Two small JS touches: `countTo` animates from 0 the first time a number appears, and the Recap button scrolls the recap into view. Inter and Pixelify stay in `fonts/` because the video build uses them.
+
 ## 2026-11-03 · Dashboard restyled as Twitchy's 8-bit control room (Zakaria → Salina)
 
 Visual only: no events, commands or data changed. Pixel font for headings and big numbers, 2–4 px corners, hard 2 px borders and offset shadows, purple only on primary actions, green/amber/red only for status. Removed: the eyebrow labels, the "Local only", "2 steps", saves and latency-health badges, and the duplicate latency stat in the hero (the Latency tile still has it). Twitchy in the hero is bigger and its frame takes the state colour. The recap tile (`#report-panel`) is hidden until the stream ends or **Recap** (the old "Show report now", same `#show-report` id, now in the saves tile) is pressed, and hides again when a new stream goes live. Empty states are one line. Nothing for you to do; the details are in `architecture.md`.
