@@ -27,6 +27,12 @@ const scenarios = [
   { id: "demo-password", kind: "password" as const, preview: "password field", box: { x: 540, y: 760, w: 330, h: 52 } },
   { id: "demo-address", kind: "watchlist" as const, preview: "watchlist: home address", box: { x: 1230, y: 210, w: 410, h: 62 } },
   { id: "demo-qr", kind: "qr_code" as const, preview: "QR code", box: { x: 300, y: 570, w: 150, h: 150 } },
+  { id: "demo-phone", kind: "phone" as const, preview: "phone number", box: { x: 1490, y: 720, w: 330, h: 56 } },
+  { id: "demo-ip", kind: "ip" as const, preview: "IP address", box: { x: 90, y: 890, w: 300, h: 54 } },
+  { id: "demo-card", kind: "card" as const, preview: "credit card", box: { x: 1060, y: 860, w: 390, h: 60 } },
+  { id: "demo-seed", kind: "seed_phrase" as const, preview: "seed phrase", box: { x: 770, y: 150, w: 420, h: 60 } },
+  { id: "demo-rule", kind: "custom_rule" as const, preview: "custom rule match", box: { x: 720, y: 620, w: 460, h: 58 } },
+  { id: "demo-sensitive", kind: "sensitive_region" as const, preview: "sensitive region", box: { x: 420, y: 370, w: 300, h: 220 } },
 ];
 const burstScenarios = [
   { id: "burst-email", kind: "email" as const, preview: "a…@example.com", box: { x: 120, y: 180, w: 330, h: 52 } },
@@ -49,7 +55,7 @@ async function runCycle() {
   for (let index = 0; index < scenarios.length; index += 1) {
     const leak = scenarios[index]!;
     bus.emit("leak.detected", { ...leak, id: `${leak.id}-${base}`, preview: redacted(leak.preview), totalBlocked: ++totalBlocked, at: at() });
-    await delay(index === 0 ? 180 : 1_150);
+    await delay(1_500);
   }
   for (const leak of scenarios) {
     bus.emit("leak.cleared", { id: `${leak.id}-${base}`, at: at() });

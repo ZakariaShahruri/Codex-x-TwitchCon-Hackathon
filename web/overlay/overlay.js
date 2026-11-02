@@ -3,6 +3,16 @@ const CANVAS_HEIGHT = 1080;
 const MASCOT_SIZE = 176;
 const MASCOT_MARGIN = 36;
 const MAX_PENDING_SAVES = 2;
+const SPRITE_URL = "/overlay/assets/twitchy.svg";
+const REACTIONS = {
+  shield: { kinds: ["api_key", "password", "custom_rule"], duration: 500, quick: 170, label: "BASH!" },
+  envelope: { kinds: ["email", "phone"], duration: 620, quick: 180, label: "ZIPP!" },
+  house: { kinds: ["watchlist", "ip"], duration: 620, quick: 180, label: "HIDE!" },
+  chomp: { kinds: ["qr_code"], duration: 560, quick: 170, label: "NOM!" },
+  vault: { kinds: ["card", "seed_phrase", "sensitive_region"], duration: 620, quick: 180, label: "SAFE!" },
+  generic: { kinds: [], duration: 300, quick: 140, label: "BLOCKED!" },
+};
+const REACTION_BY_KIND = new Map(Object.entries(REACTIONS).flatMap(([name, reaction]) => reaction.kinds.map((kind) => [kind, name])));
 const stage = document.querySelector("#stage");
 const twitchy = document.querySelector("#twitchy");
 const mascotPose = document.querySelector("#mascot-pose");
@@ -58,7 +68,7 @@ function sendHomeAndClearQueue() {
   wakePause?.();
   cover.classList.remove("play");
   cover.style.display = "none";
-  delete twitchy.dataset.action;
+  setAction();
   twitchy.style.setProperty("--travel-duration", "320ms");
   const home = homePosition();
   place(home.x, home.y);
@@ -71,7 +81,7 @@ function resetToSnapshot() {
   wakePause?.();
   cover.classList.remove("play");
   cover.style.display = "none";
-  delete twitchy.dataset.action;
+  setAction();
   twitchy.classList.remove("ready");
   const home = homePosition();
   place(home.x, home.y);
@@ -81,9 +91,19 @@ function resetToSnapshot() {
 function setState(state) {
   const status = ["off", "armed", "degraded", "panic"].includes(state?.status) ? state.status : "off";
   stateStatus = status;
+  stage.dataset.state = status;
   twitchy.dataset.state = status;
-  mascotPose.setAttribute("href", `/overlay/assets/twitchy.svg#${status}`);
+  if (!twitchy.dataset.action) mascotPose.setAttribute("href", `${SPRITE_URL}#${status}`);
   if (status === "panic" || status === "off") sendHomeAndClearQueue();
+}
+
+function setAction(action, duration) {
+  if (action) twitchy.dataset.action = action;
+  else delete twitchy.dataset.action;
+  if (duration) twitchy.style.setProperty("--action-duration", `${duration}ms`);
+  else twitchy.style.removeProperty("--action-duration");
+  const pose = action && ["shield", "envelope", "house", "chomp", "vault"].includes(action) ? action : stateStatus;
+  mascotPose.setAttribute("href", `${SPRITE_URL}#${pose}`);
 }
 
 function setCount(value, animate = false, exact = false) {
@@ -113,12 +133,14 @@ function targetFor(box) {
   };
 }
 
-function showCover(box, duration) {
+function showCover(box, reaction, duration) {
   cover.style.left = `${box.x * scaleX}px`;
   cover.style.top = `${box.y * scaleY}px`;
   cover.style.width = `${Math.max(8, box.w * scaleX)}px`;
   cover.style.height = `${Math.max(8, box.h * scaleY)}px`;
   cover.style.setProperty("--cover-duration", `${duration}ms`);
+  cover.dataset.reaction = reaction;
+  cover.querySelector(".cover-label").textContent = REACTIONS[reaction].label;
   cover.classList.remove("play");
   cover.style.display = "block";
   requestAnimationFrame(() => cover.classList.add("play"));
@@ -128,27 +150,29 @@ async function actOn(leak, version, chained) {
   const target = targetFor(leak.box);
   const travelDuration = chained ? 220 : 360;
   twitchy.style.setProperty("--travel-duration", `${travelDuration}ms`);
-  twitchy.dataset.action = "jump";
+  setAction("jump", travelDuration);
   place(target.x, target.y);
   await pause(travelDuration);
   if (version !== runVersion) return;
   setCount(leak.totalBlocked, true);
-  twitchy.dataset.action = "pull";
-  const quickSave = queue.length > 0;
-  const coverDuration = quickSave ? 140 : 280;
-  showCover(leak.box, coverDuration);
-  await pause(coverDuration + 20);
+  const reaction = REACTION_BY_KIND.get(leak.kind) ?? "generic";
+  const spec = REACTIONS[reaction];
+  const quickSave = chained || queue.length > 0;
+  const reactionDuration = quickSave ? spec.quick : spec.duration;
+  setAction(reaction, reactionDuration);
+  showCover(leak.box, reaction, reactionDuration);
+  await pause(reactionDuration + 20);
   if (version !== runVersion) return;
   cover.classList.remove("play");
   cover.style.display = "none";
   if (queue.length > 0) return;
-  twitchy.dataset.action = "jump";
+  setAction("jump", 320);
   const home = homePosition();
   twitchy.style.setProperty("--travel-duration", "320ms");
   place(home.x, home.y);
   await pause(320);
   if (version !== runVersion) return;
-  delete twitchy.dataset.action;
+  setAction();
 }
 
 async function playQueue() {

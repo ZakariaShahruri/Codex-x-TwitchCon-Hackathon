@@ -42,4 +42,35 @@
     <path fill="#fff0a6" d="M15 21h2v2h-2z"/>
     <path fill="#ff648c" d="M4 5h2v3H4zM3 6h4v1H3zM26 4h2v3h-2zM25 5h4v1h-4z"/>
   </symbol>
+  <symbol id="shield" viewBox="0 0 32 32">
+    <use href="#body"/>
+    <path fill="#fff0a6" d="M28 8h2v3h2v2h-2v3h-2v-3h-2v-2h2zM3 17h2v2h2v2H5v2H3v-2H1v-2h2z"/>
+    <path fill="#17172c" d="M10 12h4v5h-4zM18 12h4v5h-4z"/>
+    <path fill="#fff" d="M11 12h2v2h-2zM19 12h2v2h-2z"/>
+  </symbol>
+  <symbol id="envelope" viewBox="0 0 32 32">
+    <use href="#body"/>
+    <path fill="#17172c" d="M10 12h4v4h-4zM18 12h4v4h-4zM14 20h4v2h-4z"/>
+    <path fill="#ff7eb6" d="M3 18h11v2h2v7h-2v2H4v-2H2v-7h1z"/>
+    <path fill="#fff0a6" d="M4 20h10v5l-5-3-5 3zM14 18h2v2h-2z"/>
+  </symbol>
+  <symbol id="house" viewBox="0 0 32 32">
+    <use href="#body"/>
+    <path fill="#17172c" d="M10 12h4v5h-4zM18 12h4v5h-4z"/>
+    <path fill="#fff" d="M11 12h2v2h-2zM19 12h2v2h-2z"/>
+    <path fill="#ffdc68" d="M2 17h3v-3h3v3h2v5H7v-2H5v2H2zM23 17h2v-3h3v3h2v5h-4v-2h-2v2h-1z"/>
+  </symbol>
+  <symbol id="chomp" viewBox="0 0 32 32">
+    <use href="#body"/>
+    <path fill="#17172c" d="M9 12h5v5H9zM18 12h5v5h-5zM12 19h9v5h-2v2h-5v-2h-2z"/>
+    <path fill="#fff" d="M10 12h2v2h-2zM19 12h2v2h-2z"/>
+    <path fill="#fff0a6" d="M14 19h2v3h-2zM18 19h2v3h-2z"/>
+    <path fill="#83f3cf" d="M3 8h2v2H3zM26 12h2v2h-2zM5 26h2v2H5z"/>
+  </symbol>
+  <symbol id="vault" viewBox="0 0 32 32">
+    <use href="#body"/>
+    <path fill="#17172c" d="M9 12h5v5H9zM18 12h5v5h-5z"/>
+    <path fill="#fff" d="M10 12h2v2h-2zM19 12h2v2h-2z"/>
+    <path fill="#b9abff" d="M3 20h2v-3h3v3h2v6H8v-2H6v2H3zM22 20h2v-3h3v3h2v6h-4v-2h-2v2h-1z"/>
+  </symbol>
 </svg>
