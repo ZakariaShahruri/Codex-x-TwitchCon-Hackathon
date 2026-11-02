@@ -4,6 +4,8 @@
 
 **Twitchy catches leaks before your viewers ever see them.**
 
+▶ **[Watch the 2-minute demo](https://youtu.be/7bE7jsvFZwk)**
+
 Streamers leak API keys, passwords, home addresses and login QR codes on stream all the time. Once a frame airs, it's in the VOD, the clips and someone's screenshot, and you can't take it back.
 
 Twitchy sits between OBS and Twitch. Your stream already runs on a short delay; Twitchy reads the *undelayed* picture, finds secrets, and puts a mask over them inside that delay, so the frame that reaches Twitch is already covered. A pixel mascot, Twitchy, pops up on the overlay and in chat every time it makes a save.
