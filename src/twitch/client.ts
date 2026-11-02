@@ -78,6 +78,7 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     const missing = required.filter((name) => !env[name]?.trim());
     if (missing.length) {
       logger.warn(`[twitch] disabled: missing ${missing.join(", ")}; Twitch EventSub will not start.`);
+      bus.emit("twitch.status", { connected: false, error: `Missing ${missing.join(", ")}`, at: Date.now() });
       return async () => {};
     }
 
@@ -85,9 +86,26 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     const token = env.TWITCH_BOT_TOKEN!.replace(/^oauth:/i, "");
     const botId = env.TWITCH_BOT_USER_ID!;
     const broadcasterId = env.TWITCH_BROADCASTER_ID!;
+    let twitchConnected = false;
+    let streamLive: boolean | undefined;
+    let twitchLogin: string | undefined;
+    let tokenHoursLeft: number | undefined;
+    const publishStatus = (error?: string) => {
+      const status: EventMap["twitch.status"] = { connected: twitchConnected, at: Date.now() };
+      if (streamLive !== undefined) status.live = streamLive;
+      if (twitchLogin) status.login = twitchLogin;
+      if (tokenHoursLeft !== undefined) status.expiresInHours = tokenHoursLeft;
+      if (error) status.error = error.slice(0, 180);
+      bus.emit("twitch.status", status);
+    };
     const tokenManager = createTokenManager({
       clientId, accessToken: token, clientSecret: env.TWITCH_CLIENT_SECRET,
       refreshToken: env.TWITCH_BOT_REFRESH_TOKEN, fetch: fetcher, logger,
+      onStatus: (status) => {
+        if (status.login !== undefined) twitchLogin = status.login;
+        if (status.expiresInHours !== undefined) tokenHoursLeft = status.expiresInHours;
+        publishStatus(status.error);
+      },
     });
     void tokenManager.start();
     const sender = createChatSender({
@@ -290,6 +308,10 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       const url = connection.url;
       if (!removeConnection(connection, true)) return;
       if (stopped) return;
+      if (wasActive) {
+        twitchConnected = false;
+        publishStatus(failure.description);
+      }
       if (wasCandidate && previous && active === previous) scheduleCandidateRetry(url, previous, failure);
       else if (!active && !candidate) scheduleReconnect(undefined, failure);
       else if (wasActive && candidate) logger.warn("[twitch] EventSub active socket failed during handover; waiting for the replacement welcome.");
@@ -330,6 +352,10 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     };
 
     const authenticationFailed = (connection: Connection) => {
+      if (active === connection) {
+        twitchConnected = false;
+        publishStatus("Helix subscription returned 401");
+      }
       if (!removeConnection(connection, true)) return;
       scheduleReconnect(authRetryMs, { signature: "helix-subscription-401", description: "Helix subscription returned 401" });
     };
@@ -384,6 +410,8 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
       active = connection;
       if (previous && previous !== connection) removeConnection(previous, true);
       retryAttempt = 0;
+      twitchConnected = true;
+      publishStatus();
       reportRecovery();
       logger.log("[twitch] EventSub reconnect handover complete.");
       return true;
@@ -407,6 +435,8 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
         return;
       }
       if (connection !== active) return;
+      twitchConnected = true;
+      publishStatus();
       await subscribeAll(connection);
     };
 
@@ -456,6 +486,8 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
             if (subscription?.type === "stream.online") {
               logger.log(`[twitch] stream.online${typeof event?.broadcaster_user_name === "string" ? `: ${event.broadcaster_user_name}` : "."}`);
               streamStarted = true;
+              streamLive = true;
+              publishStatus();
               streamLeakCount = 0;
               leakCount = 0;
               clearSaveWindows();
@@ -463,6 +495,8 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
             }
             if (subscription?.type === "stream.offline") {
               logger.log(`[twitch] stream.offline${typeof event?.broadcaster_user_name === "string" ? `: ${event.broadcaster_user_name}` : "."}`);
+              streamLive = false;
+              publishStatus();
               sender.sendReply(`🛡 Twitchy blocked ${leakCount} ${leakCount === 1 ? "leak" : "leaks"} this stream`);
             }
           }
@@ -504,6 +538,10 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
         const reason = event.reason ? socketErrorDetail({ message: event.reason }) : "";
         const description = `${wasCandidate ? "replacement " : ""}socket closed (${code}${reason ? `: ${reason}` : ""})`;
         const failure = { signature: `close:${code}:${reason}`, description };
+        if (wasActive) {
+          twitchConnected = false;
+          publishStatus(description);
+        }
         if (wasCandidate && previous && active === previous) scheduleCandidateRetry(url, previous, failure);
         else if (!active && !candidate) scheduleReconnect(undefined, failure);
         else if (wasActive && candidate) logger.warn(`[twitch] EventSub ${description}; waiting up to ${retryText(welcomeTimeoutMs)} for the replacement welcome.`);
@@ -519,6 +557,10 @@ export function createEventSubTrack(dependencies: EventSubDependencies = {}) {
     return async () => {
       if (stopped) return;
       stopped = true;
+      if (twitchConnected) {
+        twitchConnected = false;
+        publishStatus("EventSub stopped");
+      }
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (candidateRetryTimer) clearTimeout(candidateRetryTimer);
       reconnectTimer = undefined;

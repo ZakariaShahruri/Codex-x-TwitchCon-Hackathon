@@ -113,7 +113,10 @@ test("keepalive timeout reconnects with a fresh session", async () => {
 
 test("logs one detailed repeated socket failure and summarizes suppression after recovery", async () => {
   const h = harness({ retryBaseMs: 5, retryMaxMs: 10 });
-  const stop = await h.start(new EventBus(), config());
+  const statuses: any[] = [];
+  const bus = new EventBus();
+  bus.on("twitch.status", (status) => { statuses.push(status); });
+  const stop = await h.start(bus, config());
   h.sockets[0]!.emit("close", { code: 1006, reason: "connection reset" });
   await new Promise((resolve) => setTimeout(resolve, 12));
   h.sockets[1]!.emit("close", { code: 1006, reason: "connection reset" });
@@ -124,6 +127,8 @@ test("logs one detailed repeated socket failure and summarizes suppression after
   assert.equal(h.logs.filter((line) => line.includes("socket closed (1006: connection reset); reconnecting in")).length, 1);
   assert.ok(h.logs.some((line) => line.includes("1 repeated failures suppressed")));
   assert.ok(h.logs.some((line) => line.includes("reconnecting in 5 ms")));
+  assert.ok(statuses.some((status) => status.connected === false && status.error?.includes("1006")));
+  assert.ok(statuses.some((status) => status.connected === true), "a welcome after reconnect reports recovery");
   await stop();
 });
 
@@ -165,10 +170,14 @@ test("logs revocation reason and resubscribes recoverable subscription types", a
 
 test("missing Twitch credentials warn once and start without throwing or opening a socket", async () => {
   const h = harness();
-  const stop = await h.start(new EventBus(), config({ TWITCH_CLIENT_ID: "", TWITCH_BOT_TOKEN: undefined }));
+  const bus = new EventBus();
+  const statuses: any[] = [];
+  bus.on("twitch.status", (status) => { statuses.push(status); });
+  const stop = await h.start(bus, config({ TWITCH_CLIENT_ID: "", TWITCH_BOT_TOKEN: undefined }));
   assert.equal(h.sockets.length, 0);
   assert.equal(h.logs.length, 1);
   assert.match(h.logs[0]!, /TWITCH_CLIENT_ID, TWITCH_BOT_TOKEN, TWITCH_BOT_USER_ID, TWITCH_BROADCASTER_ID/);
+  assert.deepEqual(statuses.map(({ connected, error }) => ({ connected, error })), [{ connected: false, error: "Missing TWITCH_CLIENT_ID, TWITCH_BOT_TOKEN, TWITCH_BOT_USER_ID, TWITCH_BROADCASTER_ID" }]);
   await stop();
 });
 
@@ -331,7 +340,10 @@ test("a refreshed token is used for subscription retries after Helix 401", async
       return new Response(null, { status: 202 });
     },
   });
-  const stop = await h.start(new EventBus(), config({ ...env, TWITCH_BOT_TOKEN: "old-access", TWITCH_CLIENT_SECRET: "secret-value", TWITCH_BOT_REFRESH_TOKEN: "old-refresh" }));
+  const bus = new EventBus();
+  const statuses: any[] = [];
+  bus.on("twitch.status", (status) => { statuses.push(status); });
+  const stop = await h.start(bus, config({ ...env, TWITCH_BOT_TOKEN: "old-access", TWITCH_CLIENT_SECRET: "secret-value", TWITCH_BOT_REFRESH_TOKEN: "old-refresh" }));
   h.sockets[0]!.message(await fixture("session-welcome"));
   await flush();
   await flush();
@@ -339,13 +351,17 @@ test("a refreshed token is used for subscription retries after Helix 401", async
   assert.equal(requests.filter((request) => request.url.endsWith("/oauth2/token")).length, 1);
   assert.ok(requests.filter((request) => request.url.includes("/eventsub/subscriptions") && (request.init?.headers as Record<string, string>).Authorization === "Bearer new-access").length >= 3);
   assert.ok(!h.logs.join("\n").includes("secret-value"));
+  assert.ok(statuses.some(({ login, expiresInHours }) => login === "botlogin" && expiresInHours === 4));
+  assert.ok(statuses.every((status) => !JSON.stringify(status).includes("old-access") && !JSON.stringify(status).includes("new-access") && !JSON.stringify(status).includes("secret-value")));
   await stop();
 });
 
 test("stream.online auto-arms and stream.offline sends the leak count", async () => {
   const bus = new EventBus();
   const commands: any[] = [];
+  const statuses: any[] = [];
   bus.on("shield.command", (command) => { commands.push(command); });
+  bus.on("twitch.status", (status) => { statuses.push(status); });
   const h = harness({ chatMessageGapMs: 1 });
   const stop = await h.start(bus, config());
   const socket = h.sockets[0]!;
@@ -366,5 +382,9 @@ test("stream.online auto-arms and stream.offline sends the leak count", async ()
 
   assert.deepEqual(commands.map(({ action, by }) => ({ action, by })), [{ action: "on", by: "stream.online" }]);
   assert.ok(h.requests.some((request) => request.url.includes("/chat/messages") && request.body.message === "🛡 Twitchy blocked 1 leak this stream"));
+  assert.ok(statuses.some(({ connected }) => connected === true), "EventSub welcome reports connected");
+  assert.ok(statuses.some(({ live }) => live === true), "stream.online reports live");
+  assert.ok(statuses.some(({ live }) => live === false), "stream.offline reports not live");
+  assert.ok(statuses.every((status) => !JSON.stringify(status).includes("user-token")));
   await stop();
 });

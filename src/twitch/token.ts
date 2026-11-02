@@ -12,6 +12,7 @@ export interface TokenManagerOptions {
   fetch?: typeof fetch;
   logger?: Logger;
   renewalBufferMs?: number;
+  onStatus?: (status: { login?: string; expiresInHours?: number; error?: string }) => void;
 }
 
 /** Holds Twitch credentials only in memory and renews them without ever logging their values. */
@@ -51,6 +52,7 @@ export function createTokenManager(options: TokenManagerOptions) {
     const login = typeof data.login === "string" ? data.login : "unknown";
     const expiresIn = typeof data.expires_in === "number" && Number.isFinite(data.expires_in) ? data.expires_in : 0;
     logger.log(`[twitch] token validated for ${login}; expires in ${(expiresIn / 3600).toFixed(2)} hours.`);
+    options.onStatus?.({ login, expiresInHours: expiresIn / 3600 });
     scheduleRenewal(expiresIn);
     return { ok: true as const, status: response.status };
   };
@@ -69,21 +71,25 @@ export function createTokenManager(options: TokenManagerOptions) {
         const response = await fetcher(TOKEN_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
         if (!response.ok) {
           logger.error(`[twitch] Token renewal failed (HTTP ${response.status}); the bot may need new credentials. ${TOKEN_HELP}`);
+          options.onStatus?.({ error: `Token renewal failed (HTTP ${response.status})` });
           return false;
         }
         const data = await response.json() as { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown };
         if (typeof data.access_token !== "string" || typeof data.refresh_token !== "string") {
           logger.error(`[twitch] Token renewal response was incomplete; the bot may need new credentials. ${TOKEN_HELP}`);
+          options.onStatus?.({ error: "Token renewal response was incomplete" });
           return false;
         }
         accessToken = data.access_token;
         refreshToken = data.refresh_token;
         const expiresIn = typeof data.expires_in === "number" && Number.isFinite(data.expires_in) ? data.expires_in : 14_400;
         logger.log(`[twitch] bot token renewed; expires in ${(expiresIn / 3600).toFixed(2)} hours.`);
+        options.onStatus?.({ expiresInHours: expiresIn / 3600 });
         scheduleRenewal(expiresIn);
         return true;
       } catch {
         logger.error(`[twitch] Token renewal failed because Twitch could not be reached. ${TOKEN_HELP}`);
+        options.onStatus?.({ error: "Twitch could not be reached for token renewal" });
         return false;
       } finally {
         refreshInFlight = undefined;
@@ -99,9 +105,11 @@ export function createTokenManager(options: TokenManagerOptions) {
       if (!result.ok) {
         if (result.status === 401) logger.error(`[twitch] Token validation returned 401: TWITCH_BOT_TOKEN is invalid or expired. ${TOKEN_HELP}`);
         else logger.warn(`[twitch] Token validation failed (HTTP ${result.status}); EventSub will continue and retry.`);
+        options.onStatus?.({ error: result.status === 401 ? "Token invalid or expired" : `Token validation failed (HTTP ${result.status})` });
       }
     } catch {
       logger.warn("[twitch] Could not validate the bot token because Twitch could not be reached; EventSub will continue and retry.");
+      options.onStatus?.({ error: "Twitch could not be reached to validate the bot token" });
     }
   };
 

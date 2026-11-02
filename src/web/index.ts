@@ -14,7 +14,7 @@ type WireEvent = { event: BrowserEvent; payload: EventMap[BrowserEvent] };
 type BrowserCommand = typeof browserCommands[number];
 /** Sent once when a page connects, so a reloaded page shows the current state without replaying (and re-animating) old events. */
 export type WireSnapshot = {
-  snapshot: { shieldState?: EventMap["shield.state"]; leakCount: number; privateState?: EventMap["private.state"] };
+  snapshot: { shieldState?: EventMap["shield.state"]; leakCount: number; privateState?: EventMap["private.state"]; twitchStatus?: EventMap["twitch.status"] };
 };
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const roleEvents: Record<Role, ReadonlySet<BrowserEvent>> = {
@@ -85,6 +85,12 @@ export const start: StartTrack = async (bus, config) => {
   let stopped = false;
   let latestState: EventMap["shield.state"] | undefined;
   let latestPrivate: EventMap["private.state"] | undefined;
+  let latestTwitchStatus: EventMap["twitch.status"] | undefined;
+  if (config.env) {
+    const requiredTwitch = ["TWITCH_CLIENT_ID", "TWITCH_BOT_TOKEN", "TWITCH_BOT_USER_ID", "TWITCH_BROADCASTER_ID"] as const;
+    const missingTwitch = requiredTwitch.filter((name) => !config.env[name]?.trim());
+    if (missingTwitch.length) latestTwitchStatus = { connected: false, error: `Missing ${missingTwitch.join(", ")}`, at: Date.now() };
+  }
   let latestLeakCount = 0;
   let streamStarted = false;
   let streamLeakCount = 0;
@@ -97,6 +103,7 @@ export const start: StartTrack = async (bus, config) => {
     subscribe(event, (payload) => {
       if (event === "shield.state") latestState = payload as EventMap["shield.state"];
       if (event === "private.state") latestPrivate = payload as EventMap["private.state"];
+      if (event === "twitch.status") latestTwitchStatus = payload as EventMap["twitch.status"];
       let wirePayload = payload;
       if (event === "leak.detected") {
         const leak = payload as EventMap["leak.detected"];
@@ -115,6 +122,7 @@ export const start: StartTrack = async (bus, config) => {
     shieldState: latestState,
     leakCount: latestLeakCount,
     privateState: role === "dashboard" ? latestPrivate : undefined,
+    twitchStatus: role === "dashboard" ? latestTwitchStatus : undefined,
   } });
   const onShieldCommand = (command: EventMap["shield.command"]) => {
     if (command.action !== "on" || command.by !== "stream.online") return;
@@ -154,8 +162,8 @@ export const start: StartTrack = async (bus, config) => {
     const role: Role | undefined = path === "/ws/overlay" ? "overlay" : path === "/ws/dashboard" ? "dashboard" : undefined;
     const allowedHosts = new Set([`127.0.0.1:${config.webPort}`, `localhost:${config.webPort}`]);
     const origin = req.headers.origin;
-    const allowedOrigins = new Set([...allowedHosts].map((host) => `http://${host}`));
-    if (!role || !allowedHosts.has(req.headers.host ?? "") || !origin || !allowedOrigins.has(origin)) { socket.destroy(); return; }
+    const host = req.headers.host ?? "";
+    if (!role || !allowedHosts.has(host) || !origin || origin !== `http://${host}`) { socket.destroy(); return; }
     wsServer?.handleUpgrade(req, socket, head, (client) => {
       (client as WebSocket & { twitchyRole?: Role }).twitchyRole = role;
       sockets.add(client);

@@ -64,6 +64,10 @@ test("serves the overlay page at /overlay/ and refuses paths outside it", async 
     assert.equal(page.status, 200);
     assert.match(await page.text(), /Twitchy Overlay/);
     assert.equal((await fetch(`http://127.0.0.1:${port}/overlay/overlay.js`)).status, 200);
+    const dashboard = await fetch(`http://127.0.0.1:${port}/dashboard/`);
+    assert.equal(dashboard.status, 200);
+    assert.match(await dashboard.text(), /Streamer dashboard|Stream console/i);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/dashboard/dashboard.js`)).status, 200);
     assert.notEqual((await fetch(`http://127.0.0.1:${port}/overlay/..%2F..%2Fpackage.json`)).status, 200);
   } finally { await stop(); }
 });
@@ -78,6 +82,24 @@ test("sends an empty snapshot and no fake leak to the first page", async () => {
     assert.deepEqual(overlay.messages, [{ snapshot: { leakCount: 0 } }]);
   } finally {
     await close(overlay.socket);
+    await stop();
+  }
+});
+
+test("dashboard snapshot reports missing Twitch configuration without exposing credentials", async () => {
+  const bus = new EventBus();
+  const port = await freePort();
+  const stop = await start(bus, { webPort: port, env: { TWITCH_BOT_TOKEN: "test-token-secret" } } as Config);
+  const dashboard = await connect(port, "dashboard");
+  try {
+    await settle();
+    const [snapshot] = snapshots(dashboard.messages);
+    assert.equal(snapshot.leakCount, 0);
+    assert.equal(snapshot.twitchStatus.connected, false);
+    assert.equal(snapshot.twitchStatus.error, "Missing TWITCH_CLIENT_ID, TWITCH_BOT_USER_ID, TWITCH_BROADCASTER_ID");
+    assert.ok(!JSON.stringify(dashboard.messages).includes("test-token-secret"));
+  } finally {
+    await close(dashboard.socket);
     await stop();
   }
 });
@@ -109,12 +131,13 @@ test("filters by role and snapshots state, leak count and private labels on reco
     bus.emit("shield.state", { status: "armed", at: 10 });
     bus.emit("private.state", { watchlist: [{ id: "label-only", label: "home" }], rules: [], at: 11 });
     bus.emit("engine.metrics", { lastFrameMs: 3, p95FrameMs: 4, budgetMs: 50, framesPerSec: 30, at: 12 });
+    bus.emit("twitch.status", { connected: true, live: true, login: "bot", expiresInHours: 3.5, at: 12 });
     bus.emit("rules.compile", { requestId: "private-request", text: "secret rule text" });
     bus.emit("leak.detected", { id: "leak-1", kind: "email", box: { x: 1, y: 2, w: 3, h: 4 }, preview: redacted("email"), totalBlocked: 7, at: 13 });
     bus.emit("chat.cheer", { by: "salina", at: 14 });
     await settle();
     assert.deepEqual(events(firstOverlay.messages), ["shield.state", "leak.detected", "chat.cheer"]);
-    assert.deepEqual(events(firstDashboard.messages), ["shield.state", "private.state", "engine.metrics", "leak.detected", "chat.cheer"]);
+    assert.deepEqual(events(firstDashboard.messages), ["shield.state", "private.state", "engine.metrics", "twitch.status", "leak.detected", "chat.cheer"]);
     assert.equal(JSON.stringify(firstOverlay.messages).includes("secret rule text"), false);
     assert.equal(JSON.stringify(firstDashboard.messages).includes("secret rule text"), false);
     await close(overlay); overlay = undefined;
@@ -132,6 +155,7 @@ test("filters by role and snapshots state, leak count and private labels on reco
       shieldState: { status: "armed", at: 10 },
       leakCount: 7,
       privateState: { watchlist: [{ id: "label-only", label: "home" }], rules: [], at: 11 },
+      twitchStatus: { connected: true, live: true, login: "bot", expiresInHours: 3.5, at: 12 },
     }]);
   } finally {
     if (overlay) await close(overlay);
@@ -191,11 +215,14 @@ test("rejects missing or foreign Origin and Host headers", async () => {
   const port = await freePort();
   const stop = await start(new EventBus(), config(port));
   try {
+    const localhost = await connect(port, "dashboard", { origin: `http://localhost:${port}`, host: `localhost:${port}` });
+    await close(localhost.socket);
     for (const options of [
       { origin: null },
       { origin: "https://evil.example" },
       { origin: `http://evil.example:${port}` },
       { host: `evil.example:${port}` },
+      { host: `localhost:${port}` },
     ]) {
       await assert.rejects(connect(port, "dashboard", options));
     }
@@ -228,16 +255,30 @@ test("forwards valid browserCommands in-process but never logs or echoes config.
   const stop = await start(bus, config(port));
   const delivered: unknown[] = [];
   bus.on("config.updated", (payload) => { delivered.push(payload); });
+  const otherCommands: unknown[] = [];
+  bus.on("rules.compile", (payload) => { otherCommands.push(["rules.compile", payload]); });
+  bus.on("obs.setup", (payload) => { otherCommands.push(["obs.setup", payload]); });
+  const originalLog = console.log;
+  const capturedLogs: unknown[][] = [];
+  console.log = (...parts: unknown[]) => { capturedLogs.push(parts); };
   let browser: WebSocket | undefined;
   try {
     const connected = await connect(port, "dashboard");
     browser = connected.socket;
     browser.send(JSON.stringify({ event: "config.updated", payload: { watchlist: { add: [{ label: "home", value: "private-secret-value" }] } } }));
+    browser.send(JSON.stringify({ event: "rules.compile", payload: { requestId: "rule-1", text: "hide my mother's name" } }));
+    browser.send(JSON.stringify({ event: "obs.setup", payload: { requestId: "obs-1", contentScene: "Just Chatting" } }));
     await settle();
     assert.deepEqual(delivered, [{ watchlist: { add: [{ label: "home", value: "private-secret-value" }] } }]);
     assert.equal(JSON.stringify(connected.messages).includes("private-secret-value"), false);
+    assert.equal(JSON.stringify(capturedLogs).includes("private-secret-value"), false);
+    assert.deepEqual(otherCommands, [
+      ["rules.compile", { requestId: "rule-1", text: "hide my mother's name" }],
+      ["obs.setup", { requestId: "obs-1", contentScene: "Just Chatting" }],
+    ]);
   } finally {
     if (browser) await close(browser);
     await stop();
+    console.log = originalLog;
   }
 });
