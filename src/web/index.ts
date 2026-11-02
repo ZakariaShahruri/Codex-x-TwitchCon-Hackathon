@@ -129,9 +129,19 @@ export const start: StartTrack = async (bus, config) => {
     console.log(`web server listening at http://127.0.0.1:${config.webPort}/overlay/`);
   } catch (error) {
     for (const remove of removers) remove();
-    console.error(`[web] ${bindError(config.webPort, error).message}; web track will stay disabled.`);
-    try { wsServer.close(() => {}); } catch { /* The WebSocket server never began listening. */ }
-    try { server.close(() => {}); } catch { /* The HTTP server never began listening. */ }
+    await Promise.all([
+      new Promise<void>((resolve) => {
+        try { wsServer?.close(() => resolve()); } catch { resolve(); }
+      }),
+      new Promise<void>((resolve) => {
+        if (!server?.listening) { resolve(); return; }
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+    ]);
+    const message = bindError(config.webPort, error).message;
+    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") throw new Error(message);
+    console.error(`[web] ${message}; web track will stay disabled.`);
     return async () => {};
   }
 

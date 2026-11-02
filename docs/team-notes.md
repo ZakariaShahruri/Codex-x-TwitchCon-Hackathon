@@ -22,6 +22,7 @@ Things one track needs to know about the other's changes. Newest first. Each not
 
 - Removed the web Track A mock: real Track A handles `shield.command` even without OBS, so running a second responder could publish conflicting shield states.
 - `stream.online` still emits `shield.command on`; web normalizes `leak.detected.totalBlocked` and reconnect snapshots to a per-stream count, matching chat's `!twitchy` and offline report.
+- Port-taken startup is back to Zakaria's fail-fast behavior: Track B exits with the port, likely cause and `lsof` command instead of starting another shield/chat bot without its own overlay.
 - Broadcaster/moderator chat commands emit `shield.command` with the sender login in `by`; unauthorized viewers' moderation commands are silently ignored. No shared event shapes changed.
 
 ## 2026-11-02 · Leak Gauntlet uses your overlay (Zakaria → Salina)

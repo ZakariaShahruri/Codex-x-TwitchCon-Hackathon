@@ -16,7 +16,7 @@ Run the shared foundation checks with `npm test` and `npm run typecheck`. The sh
 
 ## Run Track B
 
-Configure the [Twitch CLI](https://dev.twitch.tv/docs/cli/) with the bot app's client ID and secret using `twitch configure`. On macOS, the CLI keeps these credentials in `$HOME/.twitch-cli/.twitch-cli.env`; keep that file private. Sign in as the bot account and request the chat token:
+Configure the [Twitch CLI](https://dev.twitch.tv/docs/cli/) with the bot app's client ID and secret using `twitch configure`. On macOS, the CLI keeps these credentials in `~/Library/Application Support/twitch-cli/.twitch-cli.env`; keep that file private. Sign in as the bot account and request the chat token:
 
 ```sh
 twitch token --user-token --scopes "user:read:chat user:write:chat user:bot"
