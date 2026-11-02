@@ -3,7 +3,7 @@
   "captureIntervalMs": 150,
   "safetyMarginMs": 100,
   "maskPoolSize": 12,
-  "enabledDetectors": ["api_key", "email", "password", "phone", "card", "ip", "seed_phrase", "qr_code", "sensitive_region", "watchlist"],
+  "enabledDetectors": ["api_key", "email", "password", "phone", "card", "ip", "seed_phrase", "qr_code", "sensitive_region", "watchlist", "custom_rule"],
   "sensitiveRegions": [],
   "armOnStart": true,
   "webPort": 4173,

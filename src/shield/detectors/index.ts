@@ -1,6 +1,7 @@
 import type { OCRTextLine } from "../ocr/types.js";
 import { detectApiKeys as apiKeys } from "./api-key.js";
 import { detectCards as cards } from "./card.js";
+import { detectCustomRules as customRules, type CustomRuleMatcher } from "./custom-rule.js";
 import { detectEmails as emails } from "./email.js";
 import { detectIps as ips } from "./ip.js";
 import { prepareOcrLines } from "./ocr-lines.js";
@@ -18,6 +19,8 @@ export const detectPhones = (lines: readonly OCRTextLine[]): LeakCandidate[] => 
 export const detectCards = (lines: readonly OCRTextLine[]): LeakCandidate[] => cards(prepareOcrLines(lines));
 export const detectIps = (lines: readonly OCRTextLine[]): LeakCandidate[] => ips(prepareOcrLines(lines));
 export const detectSeedPhrases = (lines: readonly OCRTextLine[]): LeakCandidate[] => seedPhrases(prepareOcrLines(lines));
+export const detectCustomRules = (lines: readonly OCRTextLine[], rules: readonly CustomRuleMatcher[]): LeakCandidate[] => customRules(prepareOcrLines(lines), rules);
+export type { CustomRuleMatcher } from "./custom-rule.js";
 export { absorbedBySeedPhrases } from "./seed-phrase.js";
 export { detectQrCodes } from "./qr-code.js";
 export const detectWatchlist = (lines: readonly OCRTextLine[], entries: readonly WatchlistMatchEntry[]): LeakCandidate[] => watchlist(prepareOcrLines(lines), entries);

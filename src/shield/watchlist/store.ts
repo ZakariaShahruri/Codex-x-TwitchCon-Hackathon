@@ -1,11 +1,27 @@
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { WatchlistEntryInput, WatchlistLabel } from "../../shared/events.js";
+import type { RuleSummary, WatchlistEntryInput, WatchlistLabel } from "../../shared/events.js";
 import { normalizeWatchlistText } from "../detectors/watchlist.js";
 
 export interface WatchlistEntry extends WatchlistEntryInput { id: string }
-interface PrivateDocument { watchlist: WatchlistEntry[]; [key: string]: unknown }
+/** A compiled plain-English rule. `terms` and `patterns` are private; only the summary leaves Track A. */
+export interface StoredRule { id: string; description: string; terms: string[]; patterns: string[] }
+interface PrivateDocument { watchlist: WatchlistEntry[]; rules?: StoredRule[]; [key: string]: unknown }
+
+export function ruleSummary(rule: StoredRule): RuleSummary {
+  const parts = [
+    rule.terms.length ? `${rule.terms.length} phrase${rule.terms.length === 1 ? "" : "s"}` : "",
+    rule.patterns.length ? `${rule.patterns.length} pattern${rule.patterns.length === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+  return { id: rule.id, description: rule.description, detector: parts.join(", ") };
+}
+
+function validRules(value: unknown): value is StoredRule[] {
+  return Array.isArray(value) && value.every((rule) => rule && typeof rule === "object" && validString(rule.id, 128) &&
+    validString(rule.description, 120) && Array.isArray(rule.terms) && rule.terms.every((term: unknown) => validString(term, 200)) &&
+    Array.isArray(rule.patterns) && rule.patterns.every((pattern: unknown) => validString(pattern, 300)));
+}
 
 function validString(value: unknown, max: number): value is string {
   return typeof value === "string" && value.trim().length > 0 && value.trim().length <= max;
@@ -31,7 +47,7 @@ function validateEntries(entries: readonly WatchlistEntry[]): void {
   }
 }
 
-/** Track A's sole writer for the private watchlist file. */
+/** Track A's sole writer for the private file: the watchlist and compiled rules. */
 export class WatchlistStore {
   private queue: Promise<void> = Promise.resolve();
 
@@ -47,6 +63,7 @@ export class WatchlistStore {
       if (!Array.isArray(entries) || entries.some((entry) => !entry || typeof entry !== "object" || Array.isArray(entry))) throw new Error();
       const watchlist = entries as WatchlistEntry[];
       validateEntries(watchlist);
+      if (record.rules !== undefined && !validRules(record.rules)) throw new Error();
       document = { ...record, watchlist };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error(`Could not load private watchlist file ${filePath}: invalid or unreadable JSON.`);
@@ -74,6 +91,25 @@ export class WatchlistStore {
       this.document = next;
     });
     this.queue = operation.catch(() => undefined);
+    return operation;
+  }
+
+  get rules(): readonly StoredRule[] { return (this.document.rules ?? []).map((rule) => ({ ...rule, terms: [...rule.terms], patterns: [...rule.patterns] })); }
+
+  applyRules(change: { add?: readonly Omit<StoredRule, "id">[]; removeIds?: readonly string[] }): Promise<StoredRule[]> {
+    const operation = this.queue.then(async () => {
+      const removedIds = new Set(change.removeIds ?? []);
+      const added = (change.add ?? []).map((rule) => ({ id: randomUUID(), ...rule }));
+      const rules = [...(this.document.rules ?? []).filter((rule) => !removedIds.has(rule.id)), ...added];
+      if (!validRules(rules)) throw new Error("Rules need an id, a short description, and text terms or patterns.");
+      const next = { ...this.document, rules };
+      if (JSON.stringify(next) !== JSON.stringify(this.document)) {
+        await this.persist(next);
+        this.document = next;
+      }
+      return added;
+    });
+    this.queue = operation.then(() => undefined, () => undefined);
     return operation;
   }
 

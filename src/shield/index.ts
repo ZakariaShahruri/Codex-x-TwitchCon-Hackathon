@@ -5,6 +5,7 @@ import type { StartTrack } from "../shared/track.js";
 import { redacted, type EventMap } from "../shared/events.js";
 import { connectContentCapture, type CaptureFrame, type ContentCaptureHandle } from "./capture-loop.js";
 import { listenForObsSetup } from "./obs-setup-handler.js";
+import { listenForRuleCompiles } from "./rules/handler.js";
 import { ShieldStateMachine } from "./shield-state.js";
 import { createWatchlistService } from "./watchlist/service.js";
 
@@ -29,6 +30,7 @@ export async function startShield(
 ): ReturnType<StartTrack> {
   const watchlist = await createWatchlistService(bus, privateFile);
   const stopObsSetup = listenForObsSetup(bus, config);
+  const stopRuleCompiles = listenForRuleCompiles(bus, config, watchlist);
   const state = new ShieldStateMachine(config.armOnStart, (snapshot) => {
     bus.emit("shield.state", snapshot);
     console.log(`Shield state: ${snapshot.status}${snapshot.reason ? ` (${snapshot.reason})` : ""}`);
@@ -169,7 +171,7 @@ export async function startShield(
         onFrame,
         onError: onCaptureError,
         isArmed: () => state.isArmed,
-        watchlist: () => ({ entries: watchlist.entries, revision: watchlist.revision }),
+        watchlist: () => ({ entries: watchlist.entries, rules: watchlist.rules, revision: watchlist.revision }),
       });
       if (stopping) {
         await connected.stop();
@@ -238,6 +240,7 @@ export async function startShield(
     stopping = true;
     bus.off("shield.command", commandListener);
     stopObsSetup();
+    stopRuleCompiles();
     await watchlist.stop();
     if (retryTimer) clearTimeout(retryTimer);
     clearInterval(metricsTimer);

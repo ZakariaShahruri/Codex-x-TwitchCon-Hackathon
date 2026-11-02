@@ -4,13 +4,13 @@ import OBSWebSocket from "obs-websocket-js";
 import type { Config } from "../shared/config.js";
 import type { LeakKind } from "../shared/events.js";
 import {
-  absorbedBySeedPhrases, detectApiKeys, detectCards, detectEmails, detectIps, detectPasswords, detectPhones, detectQrCodes, detectSeedPhrases, detectSensitiveRegions, detectWatchlist,
+  absorbedBySeedPhrases, detectApiKeys, detectCards, detectCustomRules, detectEmails, detectIps, detectPasswords, detectPhones, detectQrCodes, detectSeedPhrases, detectSensitiveRegions, detectWatchlist,
   type LeakCandidate,
 } from "./detectors/index.js";
 import { MaskManager, type ExistingMask } from "./mask-manager.js";
 import { AppleVisionOCR } from "./ocr/apple-vision.js";
 import type { OCRService } from "./ocr/types.js";
-import type { WatchlistEntry } from "./watchlist/store.js";
+import type { StoredRule, WatchlistEntry } from "./watchlist/store.js";
 
 export interface CaptureFrame {
   leaks: LeakCandidate[];
@@ -35,7 +35,7 @@ export interface CaptureLoopOptions {
   onFrame: (frame: CaptureFrame) => void | Promise<void>;
   onError?: (error: Error) => void;
   isArmed?: () => boolean;
-  watchlist?: () => { entries: readonly WatchlistEntry[]; revision: number };
+  watchlist?: () => { entries: readonly WatchlistEntry[]; rules?: readonly StoredRule[]; revision: number };
 }
 
 type ManagedOCR = Pick<OCRService, "recognize"> & Partial<Pick<OCRService, "barcodes" | "close">>;
@@ -120,6 +120,7 @@ export class CaptureLoop {
       if (enabled.has("qr_code")) leaks.push(...detectQrCodes(barcodes));
       if (enabled.has("sensitive_region")) leaks.push(...detectSensitiveRegions(this.options.sensitiveRegions));
       if (enabled.has("watchlist")) leaks.push(...detectWatchlist(lines, watchlist.entries));
+      if (enabled.has("custom_rule") && watchlist.rules?.length) leaks.push(...detectCustomRules(lines, watchlist.rules));
       leaks = absorbedBySeedPhrases(leaks);
       const detectMs = performance.now() - detectStartedAt;
       this.previousFingerprint = fingerprint;

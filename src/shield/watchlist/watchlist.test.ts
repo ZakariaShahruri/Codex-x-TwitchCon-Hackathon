@@ -43,14 +43,16 @@ test("private watchlist path is injectable, private state carries labels only, a
 test("private store preserves other private document fields and rejects a label that exposes a value", async () => {
   const directory = await mkdtemp(join(tmpdir(), "twitchy-watchlist-"));
   const privatePath = join(directory, "twitchy.private.json");
-  await writeFile(privatePath, JSON.stringify({ watchlist: [], rules: [{ id: "r1", expression: "private" }] }));
+  const rules = [{ id: "r1", description: "family name", terms: ["private"], patterns: [] }];
+  await writeFile(privatePath, JSON.stringify({ watchlist: [], rules, future: { kept: true } }));
   try {
     const store = await WatchlistStore.open(privatePath);
     await assert.rejects(store.add({ label: "Jane Doe", value: "Jane Doe" }), /label must not reveal/u);
     assert.deepEqual(store.entries, []);
     await store.add({ label: "family contact", value: "Jane Doe" });
     const saved = JSON.parse(await readFile(privatePath, "utf8"));
-    assert.deepEqual(saved.rules, [{ id: "r1", expression: "private" }]);
+    assert.deepEqual(saved.rules, rules);
+    assert.deepEqual(saved.future, { kept: true });
     assert.equal(saved.watchlist[0].label, "family contact");
     assert.equal(saved.watchlist[0].value, "Jane Doe");
   } finally {
