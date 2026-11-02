@@ -3,7 +3,10 @@ import { performance } from "node:perf_hooks";
 import OBSWebSocket from "obs-websocket-js";
 import type { Config } from "../shared/config.js";
 import type { LeakKind } from "../shared/events.js";
-import { detectApiKeys, detectEmails, detectPasswords, detectSensitiveRegions, detectWatchlist, type LeakCandidate } from "./detectors/index.js";
+import {
+  detectApiKeys, detectCards, detectEmails, detectPasswords, detectPhones, detectQrCodes, detectSensitiveRegions, detectWatchlist,
+  type LeakCandidate,
+} from "./detectors/index.js";
 import { MaskManager, type ExistingMask } from "./mask-manager.js";
 import { AppleVisionOCR } from "./ocr/apple-vision.js";
 import type { OCRService } from "./ocr/types.js";
@@ -25,7 +28,7 @@ export interface CaptureFrame {
 
 export interface CaptureLoopOptions {
   capture: () => Promise<Uint8Array>;
-  ocr: Pick<OCRService, "recognize">;
+  ocr: Pick<OCRService, "recognize"> & Partial<Pick<OCRService, "barcodes">>;
   intervalMs: number;
   enabledDetectors: readonly LeakKind[];
   sensitiveRegions: Config["sensitiveRegions"];
@@ -35,7 +38,7 @@ export interface CaptureLoopOptions {
   watchlist?: () => { entries: readonly WatchlistEntry[]; revision: number };
 }
 
-type ManagedOCR = Pick<OCRService, "recognize"> & Partial<Pick<OCRService, "close">>;
+type ManagedOCR = Pick<OCRService, "recognize"> & Partial<Pick<OCRService, "barcodes" | "close">>;
 
 export interface ContentCaptureHandle {
   masks: MaskManager;
@@ -97,15 +100,22 @@ export class CaptureLoop {
       }
 
       this.wasArmed = true;
+      const enabled = new Set(this.options.enabledDetectors);
       const ocrStartedAt = performance.now();
-      const lines = await this.options.ocr.recognize(png);
+      // Apple Vision answers both from one helper call per frame.
+      const [lines, barcodes] = await Promise.all([
+        this.options.ocr.recognize(png),
+        enabled.has("qr_code") && this.options.ocr.barcodes ? this.options.ocr.barcodes(png) : [],
+      ]);
       const ocrMs = performance.now() - ocrStartedAt;
       const detectStartedAt = performance.now();
-      const enabled = new Set(this.options.enabledDetectors);
       const leaks: LeakCandidate[] = [];
       if (enabled.has("api_key")) leaks.push(...detectApiKeys(lines));
       if (enabled.has("email")) leaks.push(...detectEmails(lines));
       if (enabled.has("password")) leaks.push(...detectPasswords(lines));
+      if (enabled.has("phone")) leaks.push(...detectPhones(lines));
+      if (enabled.has("card")) leaks.push(...detectCards(lines));
+      if (enabled.has("qr_code")) leaks.push(...detectQrCodes(barcodes));
       if (enabled.has("sensitive_region")) leaks.push(...detectSensitiveRegions(this.options.sensitiveRegions));
       if (enabled.has("watchlist")) leaks.push(...detectWatchlist(lines, watchlist.entries));
       const detectMs = performance.now() - detectStartedAt;
