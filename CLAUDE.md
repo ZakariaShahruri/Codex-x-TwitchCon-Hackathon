@@ -7,15 +7,12 @@ This file is about **how we work**. What we build is in `docs/concept.md`; how i
 ## Project
 
 **Twitchy — Stream Shield**, our entry for the Codex x TwitchCon Hackathon.
-**Deadline: Nov 2, 2026, 2:00pm PST (Tue Nov 3, 06:00 Shanghai).** Milestones are in `docs/concept.md`.
 
-## Priority #1: win
+## Priorities
 
-**We are here to win: top 5, aiming for 1st.** We work overtime and the scope is ambitious on purpose. Judge every decision by one question: does it raise our score on Innovation, Impact, Technical implementation (incl. Codex) or Design, *as seen in the 3-minute video*?
-
-- Scope is the tier list in `docs/concept.md`. **Never start a tier until the previous one works flawlessly in the demo.** A leak that airs on camera loses; a missing Tier 3 feature doesn't.
-- Push for quality, not just "works": polish, reliability and how it looks on stream are what win.
-- If you see something that would clearly raise the score, say so in one line. Don't silently build it.
+- Scope is the tier list in `docs/concept.md`. **Never start a tier until the previous one works flawlessly.** A leak that airs on stream is a failure; a missing Tier 3 feature isn't.
+- Push for quality, not just "works": polish, reliability and how it looks on stream.
+- If you see something that would clearly make Twitchy better, say so in one line. Don't silently build it.
 
 | Track | Owner |
 |---|---|
@@ -31,7 +28,6 @@ This file is about **how we work**. What we build is in `docs/concept.md`; how i
 | `docs/architecture.md` | Tracks, folders, event contract, stack, conventions |
 | `docs/team-notes.md` | What changed in the other track that affects yours |
 | `docs/codex-sessions.md` | Codex session IDs per developer |
-| `docs/devpost.md` | Hackathon rules, submission, judging |
 
 ## Roles: Codex builds, Claude supports
 

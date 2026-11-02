@@ -1,6 +1,6 @@
 # Architecture
 
-Technical source of truth for Twitchy — Stream Shield. Product, scope tiers and milestones live in `concept.md`; how we work lives in `AGENTS.md` / `CLAUDE.md`.
+Technical source of truth for Twitchy — Stream Shield. Product and scope tiers live in `concept.md`; how we work lives in `AGENTS.md` / `CLAUDE.md`.
 
 ---
 

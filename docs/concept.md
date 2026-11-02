@@ -1,12 +1,10 @@
 # Concept: Twitchy — Stream Shield
 
-**Codex x TwitchCon Hackathon** · Deadline: Nov 2, 2026, 2:00pm PST (Tue Nov 3, 06:00 Shanghai)
+Built for the **Codex x TwitchCon Hackathon**.
 
 **Pitch:** Twitchy catches leaks before your viewers ever see them.
 
-## Goal: win
-
-**Winning (top 5, aiming for 1st) is the number one priority.** We're working overtime and the scope is ambitious on purpose (see *Scope tiers*). Every decision is judged by one question: does it raise our score on Innovation, Impact, Technical implementation (incl. Codex) or Design, *in the 3-minute video*?
+## Team
 
 | Track | Owner |
 |---|---|
@@ -88,15 +86,15 @@ OBS capture ──┬──► [~1s render delay] ──► broadcast
 
 ## Scope tiers
 
-Ambitious, but gated: **never start a tier until the one before it works flawlessly in the demo.** A leak that airs on camera loses the hackathon; a missing Tier 3 feature doesn't.
+Gated: **a tier starts only once the one before it works flawlessly.** A leak that airs on stream is a failure; a missing Tier 3 feature isn't.
 
 **At submission (2026-11-03):** Tier 1 and Tier 2 are built and in the demo. Tier 3 wasn't started.
 
 ### Tier 1: core (must be flawless)
 Everything above: the 4 detectors, delay + masks, Twitch commands, auto-arm, chat announcements, Twitchy overlay with counter.
 
-### Tier 2: what makes it win (planned, overtime)
-| Feature | Why it scores | Track |
+### Tier 2: what makes it useful every stream
+| Feature | Why it matters | Track |
 |---|---|---|
 | **More detectors:** phone numbers, credit cards (Luhn-checked), IP addresses, crypto seed phrases, QR codes (2FA / login QR) | Impact: covers the leaks that actually ruin streamers | A |
 | **Personal watchlist:** streamer lists their real name, home address, phone, family names; always masked, fuzzy-matched. Stored locally only | Impact: anti-doxxing, the strongest real-world story | A |
@@ -114,27 +112,6 @@ Everything above: the 4 detectors, delay + masks, Twitch commands, auto-arm, cha
 
 ### Never
 Viewer reporting (they'd already have seen it), Chrome extension, clipping, narrator, multi-machine setups.
-
-## Milestones (Shanghai time)
-| When | Done means |
-|---|---|
-| **Sat Oct 31, night** | Skeleton + event contract committed; go/no-go checks pass (delay limit, OCR latency, end-to-end mask); Track B bot + overlay working on fake events |
-| **Sun Nov 1, evening** | Tier 1 integrated and flawless on a live test stream; Leak Gauntlet running |
-| **Mon Nov 2, 18:00** | Tier 2 done. Feature freeze |
-| **Mon Nov 2, night** | Demo recorded and edited, README + Devpost text written |
-| **Tue Nov 3, 02:00** | Submitted (4 h buffer before the 06:00 deadline) |
-
-## Demo video (3 min)
-1. **Hook (0:00–0:15):** a streamer opens `.env` live. Freeze frame: "this is how keys get stolen". Then the same moment with Twitchy: masked before it airs
-2. "Introducing… **Twitchy**": mascot reveal
-3. **Live montage:** API key, email, home address from the watchlist, 2FA QR code, each masked with its own Twitchy reaction; counter ticks; chat cheers
-4. **Plain-English rule:** type "hide anything with my mom's name" → it works seconds later
-5. **Leak Gauntlet:** 20/20 blocked, latency numbers on screen
-6. Mod `!panic` from chat; dashboard setup in one click
-7. How it works + how we built it with Codex (Codex threads on screen)
-8. Outro: "Twitchy catches leaks before your viewers ever see them."
-
----
 
 ## Rejected ideas
 - **Instant Replay (+ AI narrator):** fun, but clipping already exists as a category
